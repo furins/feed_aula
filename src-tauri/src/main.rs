@@ -68,7 +68,13 @@ fn main() {
             store::create_store,
             store::unlock_store,
             store::lock_store,
-            store::store_unlocked
+            store::store_unlocked,
+            store::list_classes,
+            store::create_class,
+            store::update_class,
+            store::list_students,
+            store::create_student,
+            store::update_student
         ])
         .run(tauri::generate_context!())
         .expect("errore durante l'avvio di FEED");

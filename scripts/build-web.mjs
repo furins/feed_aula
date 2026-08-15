@@ -9,6 +9,7 @@ const distDir = join(rootDir, 'dist');
 const desktopSource = join(rootDir, 'desktop.html');
 const scanSource = join(rootDir, 'scan.html');
 const configSource = join(rootDir, 'config.html');
+const identitiesSource = join(rootDir, 'identities.html');
 const appIconSource = join(rootDir, 'app-icon.png');
 
 const vendorSource = join(rootDir, 'node_modules', 'js-aruco2', 'src');
@@ -33,10 +34,11 @@ async function build() {
   await rm(distDir, { recursive: true, force: true });
   await mkdir(vendorTarget, { recursive: true });
 
-  const [desktopHtml, scanHtml, configHtml] = await Promise.all([
+  const [desktopHtml, scanHtml, configHtml, identitiesHtml] = await Promise.all([
     readFile(desktopSource, 'utf8'),
     readFile(scanSource, 'utf8'),
-    readFile(configSource, 'utf8')
+    readFile(configSource, 'utf8'),
+    readFile(identitiesSource, 'utf8')
   ]);
 
   let offlineScan = scanHtml;
@@ -51,6 +53,7 @@ async function build() {
     writeFile(join(distDir, 'index.html'), desktopHtml, 'utf8'),
     writeFile(join(distDir, 'scan.html'), offlineScan, 'utf8'),
     writeFile(join(distDir, 'config.html'), configHtml, 'utf8'),
+    writeFile(join(distDir, 'identities.html'), identitiesHtml, 'utf8'),
     cp(appIconSource, join(distDir, 'app-icon.png')),
     cp(join(vendorSource, 'cv.js'), join(vendorTarget, 'cv.js')),
     cp(join(vendorSource, 'aruco.js'), join(vendorTarget, 'aruco.js')),

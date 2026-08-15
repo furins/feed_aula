@@ -1,0 +1,787 @@
+<!doctype html>
+<html lang="it">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>FEED · Classi e alunni</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f8f7;
+      --panel: #ffffff;
+      --text: #263438;
+      --muted: #66777b;
+      --line: #d8e3e1;
+      --accent: #418184;
+      --accent-dark: #2f6265;
+      --accent-soft: #e8f1ef;
+      --green: #6d9d69;
+      --green-soft: #eaf3e8;
+      --gold: #cba150;
+      --gold-soft: #f7f0df;
+      --danger: #b44b42;
+      --danger-soft: #fff0ee;
+      --shadow: 0 16px 42px rgba(38, 52, 56, .09);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 5% 4%, rgba(203, 161, 80, .12), transparent 26rem),
+        radial-gradient(circle at 95% 8%, rgba(65, 129, 132, .12), transparent 28rem),
+        var(--bg);
+    }
+
+    button, input, select { font: inherit; }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 30px 0 52px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .back-button {
+      min-height: 42px;
+      padding: 9px 14px;
+      border: 1px solid #b7d1ce;
+      border-radius: 12px;
+      background: var(--accent-soft);
+      color: var(--accent-dark);
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .back-button:hover { background: #dcebe8; }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      object-fit: cover;
+      margin-left: auto;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.7rem, 3.5vw, 2.35rem);
+      letter-spacing: -.035em;
+    }
+
+    .subtitle {
+      margin: 4px 0 0;
+      color: var(--muted);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(250px, .72fr) minmax(0, 2fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+
+    .panel + .panel { margin-top: 18px; }
+
+    .panel h2 {
+      margin: 0 0 15px;
+      font-size: 1.15rem;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      margin-top: 12px;
+      color: #506266;
+      font-size: .9rem;
+      font-weight: 750;
+    }
+
+    input, select {
+      width: 100%;
+      min-height: 43px;
+      padding: 9px 11px;
+      border: 1px solid #cad9d7;
+      border-radius: 12px;
+      background: white;
+      color: var(--text);
+      outline: none;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(65, 129, 132, .14);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin-top: 15px;
+    }
+
+    button {
+      min-height: 40px;
+      border: 0;
+      border-radius: 12px;
+      padding: 9px 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    .primary { background: var(--accent); color: white; }
+    .primary:hover:not(:disabled) { background: var(--accent-dark); }
+    .secondary { background: var(--accent-soft); color: var(--accent-dark); }
+    .success { background: var(--green-soft); color: #426d45; }
+    .danger { background: var(--danger-soft); color: var(--danger); }
+
+    .class-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .class-button {
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--line);
+      background: #fbfcfc;
+      color: var(--text);
+      padding: 11px 12px;
+    }
+
+    .class-button.selected {
+      border-color: #a8c8c5;
+      background: var(--accent-soft);
+      color: var(--accent-dark);
+    }
+
+    .class-button small {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .empty {
+      padding: 18px;
+      border: 1px dashed #cbd9d7;
+      border-radius: 14px;
+      color: var(--muted);
+      text-align: center;
+      background: #fbfcfc;
+    }
+
+    .note {
+      margin: 12px 0 0;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: .88rem;
+    }
+
+    .student-form {
+      display: grid;
+      grid-template-columns: 110px minmax(180px, 1fr) 130px auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .student-form .field { margin-top: 0; }
+
+    .table-wrap {
+      margin-top: 15px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 8px;
+      min-width: 720px;
+    }
+
+    th {
+      padding: 0 8px 3px;
+      color: var(--muted);
+      font-size: .78rem;
+      text-align: left;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    td {
+      padding: 8px;
+      background: #f9fbfa;
+      border-top: 1px solid #e3ecea;
+      border-bottom: 1px solid #e3ecea;
+      vertical-align: middle;
+    }
+
+    td:first-child {
+      border-left: 1px solid #e3ecea;
+      border-radius: 13px 0 0 13px;
+    }
+
+    td:last-child {
+      border-right: 1px solid #e3ecea;
+      border-radius: 0 13px 13px 0;
+    }
+
+    tr.inactive td { opacity: .7; }
+
+    td input, td select {
+      min-height: 38px;
+      padding: 7px 9px;
+    }
+
+    .student-actions {
+      display: flex;
+      gap: 7px;
+      justify-content: flex-end;
+    }
+
+    .student-actions button {
+      min-height: 36px;
+      padding: 7px 10px;
+      white-space: nowrap;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 9px;
+      border-radius: 999px;
+      font-size: .78rem;
+      font-weight: 800;
+    }
+
+    .status.active {
+      color: #426d45;
+      background: var(--green-soft);
+    }
+
+    .status.inactive {
+      color: #7c6a43;
+      background: var(--gold-soft);
+    }
+
+    .message {
+      min-height: 1.35em;
+      margin-top: 12px;
+      font-size: .9rem;
+      font-weight: 700;
+    }
+
+    .message.error { color: var(--danger); }
+    .message.ok { color: #426d45; }
+
+    [hidden] { display: none !important; }
+
+    @media (max-width: 880px) {
+      .layout { grid-template-columns: 1fr; }
+      .student-form { grid-template-columns: 100px 1fr 120px; }
+      .student-form button { grid-column: 1 / -1; }
+    }
+
+    @media (max-width: 560px) {
+      .shell { width: min(100% - 20px, 1180px); padding-top: 20px; }
+      .topbar { align-items: flex-start; }
+      .brand-icon { display: none; }
+      .student-form { grid-template-columns: 1fr; }
+      .student-form button { grid-column: auto; }
+      .panel { padding: 16px; border-radius: 18px; }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <button id="backBtn" class="back-button" type="button">← Indietro</button>
+      <div>
+        <h1>Classi e alunni</h1>
+        <p class="subtitle">Numeri d’appello e marker sono gestiti separatamente.</p>
+      </div>
+      <img class="brand-icon" src="app-icon.png" alt="" aria-hidden="true" />
+    </header>
+
+    <div id="loading" class="panel">Caricamento dell’archivio…</div>
+
+    <div id="content" class="layout" hidden>
+      <aside>
+        <section class="panel">
+          <h2>Classi</h2>
+
+          <form id="newClassForm">
+            <label class="field">
+              Classe
+              <input id="newClassLabel" type="text" maxlength="80" placeholder="Es. 3A" required />
+            </label>
+            <label class="field">
+              Anno scolastico
+              <input id="newSchoolYear" type="text" maxlength="20" placeholder="Es. 2026/27" />
+            </label>
+            <div class="actions">
+              <button class="primary" type="submit">Aggiungi classe</button>
+            </div>
+          </form>
+
+          <div id="classMessage" class="message"></div>
+          <div id="classList" class="class-list"></div>
+        </section>
+      </aside>
+
+      <section>
+        <div id="noClass" class="panel empty">Crea o seleziona una classe.</div>
+
+        <div id="classWorkspace" hidden>
+          <section class="panel">
+            <h2>Dati della classe</h2>
+            <div class="student-form" style="grid-template-columns:minmax(180px,1fr) minmax(150px,.7fr) auto">
+              <label class="field">
+                Classe
+                <input id="classLabel" type="text" maxlength="80" />
+              </label>
+              <label class="field">
+                Anno scolastico
+                <input id="schoolYear" type="text" maxlength="20" />
+              </label>
+              <button id="saveClassBtn" class="secondary" type="button">Salva</button>
+            </div>
+            <div id="workspaceMessage" class="message"></div>
+          </section>
+
+          <section class="panel">
+            <h2>Aggiungi alunno</h2>
+            <form id="newStudentForm" class="student-form">
+              <label class="field">
+                N. appello
+                <input id="newRoster" type="number" min="1" max="9999" step="1" required />
+              </label>
+              <label class="field">
+                Nominativo
+                <input id="newStudentName" type="text" maxlength="120" required />
+              </label>
+              <label class="field">
+                Marker
+                <select id="newMarker" required></select>
+              </label>
+              <button id="addStudentBtn" class="primary" type="submit">Aggiungi</button>
+            </form>
+            <p class="note">
+              Se il numero d’appello è già occupato, FEED sposta automaticamente i numeri successivi.
+              Le assegnazioni dei marker non cambiano.
+            </p>
+            <div id="studentMessage" class="message"></div>
+          </section>
+
+          <section class="panel">
+            <h2>Alunni</h2>
+            <div id="studentsEmpty" class="empty" hidden>Nessun alunno in questa classe.</div>
+            <div id="studentsTable" class="table-wrap" hidden>
+              <table>
+                <thead>
+                  <tr>
+                    <th>N. appello</th>
+                    <th>Nominativo</th>
+                    <th>Marker</th>
+                    <th>Stato</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="studentsBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+
+    <div id="fatal" class="panel" hidden>
+      <h2>Impossibile aprire Classi e alunni</h2>
+      <p id="fatalMessage"></p>
+    </div>
+  </main>
+
+  <script>
+    'use strict';
+
+    const backBtn = document.getElementById('backBtn');
+    const loading = document.getElementById('loading');
+    const content = document.getElementById('content');
+    const fatal = document.getElementById('fatal');
+    const fatalMessage = document.getElementById('fatalMessage');
+
+    const newClassForm = document.getElementById('newClassForm');
+    const newClassLabel = document.getElementById('newClassLabel');
+    const newSchoolYear = document.getElementById('newSchoolYear');
+    const classMessage = document.getElementById('classMessage');
+    const classList = document.getElementById('classList');
+
+    const noClass = document.getElementById('noClass');
+    const classWorkspace = document.getElementById('classWorkspace');
+    const classLabel = document.getElementById('classLabel');
+    const schoolYear = document.getElementById('schoolYear');
+    const saveClassBtn = document.getElementById('saveClassBtn');
+    const workspaceMessage = document.getElementById('workspaceMessage');
+
+    const newStudentForm = document.getElementById('newStudentForm');
+    const newRoster = document.getElementById('newRoster');
+    const newStudentName = document.getElementById('newStudentName');
+    const newMarker = document.getElementById('newMarker');
+    const addStudentBtn = document.getElementById('addStudentBtn');
+    const studentMessage = document.getElementById('studentMessage');
+
+    const studentsEmpty = document.getElementById('studentsEmpty');
+    const studentsTable = document.getElementById('studentsTable');
+    const studentsBody = document.getElementById('studentsBody');
+
+    let classes = [];
+    let students = [];
+    let selectedClassUuid = null;
+
+    function invoke(command, args) {
+      const tauriInvoke = window.__TAURI__?.core?.invoke;
+      if (typeof tauriInvoke !== 'function') {
+        throw new Error('API desktop FEED non disponibile.');
+      }
+      return tauriInvoke(command, args);
+    }
+
+    function errorText(error) {
+      return typeof error === 'string' ? error : (error?.message || String(error));
+    }
+
+    function setMessage(element, text = '', kind = '') {
+      element.textContent = text;
+      element.className = `message ${kind}`.trim();
+    }
+
+    function selectedClass() {
+      return classes.find(item => item.classUuid === selectedClassUuid) || null;
+    }
+
+    function usedActiveMarkers(excludeStudentUuid = null) {
+      return new Set(
+        students
+          .filter(student =>
+            student.active &&
+            student.studentUuid !== excludeStudentUuid &&
+            Number.isInteger(student.markerNumber)
+          )
+          .map(student => student.markerNumber)
+      );
+    }
+
+    function fillMarkerSelect(select, currentValue = null, excludeStudentUuid = null, allowBlank = false) {
+      const used = usedActiveMarkers(excludeStudentUuid);
+      select.innerHTML = '';
+
+      if (allowBlank) {
+        const blank = document.createElement('option');
+        blank.value = '';
+        blank.textContent = '—';
+        select.appendChild(blank);
+      }
+
+      for (let marker = 1; marker <= 30; marker++) {
+        const option = document.createElement('option');
+        option.value = String(marker);
+        const occupied = used.has(marker);
+        option.textContent = occupied ? `${marker} · occupato` : String(marker);
+        option.disabled = occupied && marker !== currentValue;
+        if (marker === currentValue) option.selected = true;
+        select.appendChild(option);
+      }
+
+      if (currentValue === null || currentValue === undefined) {
+        const firstFree = [...select.options].find(option => option.value && !option.disabled);
+        if (firstFree) select.value = firstFree.value;
+      }
+    }
+
+    function prepareNewStudentDefaults() {
+      const active = students.filter(student => student.active);
+      const maxRoster = active.reduce((max, student) => Math.max(max, student.rosterNumber), 0);
+      newRoster.value = String(maxRoster + 1);
+      fillMarkerSelect(newMarker);
+
+      const hasFreeMarker = [...newMarker.options].some(option => option.value && !option.disabled);
+      newMarker.disabled = !hasFreeMarker;
+      addStudentBtn.disabled = !hasFreeMarker;
+
+      if (!hasFreeMarker) {
+        setMessage(studentMessage, 'Non ci sono marker liberi tra 1 e 30.', 'error');
+      }
+    }
+
+    function renderClasses() {
+      classList.innerHTML = '';
+
+      if (!classes.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'Nessuna classe.';
+        classList.appendChild(empty);
+        return;
+      }
+
+      for (const item of classes) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `class-button${item.classUuid === selectedClassUuid ? ' selected' : ''}`;
+        button.innerHTML = `
+          <strong>${escapeHtml(item.label)}</strong>
+          <small>${escapeHtml(item.schoolYear || 'Anno non indicato')} · ${item.activeStudents} alunni attivi</small>
+        `;
+        button.addEventListener('click', () => selectClass(item.classUuid));
+        classList.appendChild(button);
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function renderStudents() {
+      studentsBody.innerHTML = '';
+      const hasStudents = students.length > 0;
+      studentsEmpty.hidden = hasStudents;
+      studentsTable.hidden = !hasStudents;
+
+      for (const student of students) {
+        const row = document.createElement('tr');
+        if (!student.active) row.classList.add('inactive');
+
+        const rosterCell = document.createElement('td');
+        const rosterInput = document.createElement('input');
+        rosterInput.type = 'number';
+        rosterInput.min = '1';
+        rosterInput.max = '9999';
+        rosterInput.step = '1';
+        rosterInput.value = String(student.rosterNumber);
+        rosterCell.appendChild(rosterInput);
+
+        const nameCell = document.createElement('td');
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.maxLength = 120;
+        nameInput.value = student.displayName;
+        nameCell.appendChild(nameInput);
+
+        const markerCell = document.createElement('td');
+        const markerSelect = document.createElement('select');
+        fillMarkerSelect(
+          markerSelect,
+          student.markerNumber,
+          student.studentUuid,
+          !student.active && student.markerNumber == null
+        );
+        markerCell.appendChild(markerSelect);
+
+        const statusCell = document.createElement('td');
+        const status = document.createElement('span');
+        status.className = `status ${student.active ? 'active' : 'inactive'}`;
+        status.textContent = student.active ? 'Attivo' : 'Non attivo';
+        statusCell.appendChild(status);
+
+        const actionCell = document.createElement('td');
+        const actions = document.createElement('div');
+        actions.className = 'student-actions';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'secondary';
+        saveBtn.textContent = 'Salva';
+
+        const activeBtn = document.createElement('button');
+        activeBtn.type = 'button';
+        activeBtn.className = student.active ? 'danger' : 'success';
+        activeBtn.textContent = student.active ? 'Disattiva' : 'Riattiva';
+
+        async function save(active) {
+          setMessage(studentMessage, '');
+          const rosterNumber = Number.parseInt(rosterInput.value, 10);
+          const markerNumber = markerSelect.value ? Number.parseInt(markerSelect.value, 10) : null;
+          const displayName = nameInput.value.trim();
+
+          try {
+            await invoke('update_student', {
+              studentUuid: student.studentUuid,
+              rosterNumber,
+              markerNumber,
+              displayName,
+              active
+            });
+            await reloadSelectedClass();
+          } catch (error) {
+            setMessage(studentMessage, errorText(error), 'error');
+          }
+        }
+
+        saveBtn.addEventListener('click', () => save(student.active));
+        activeBtn.addEventListener('click', () => save(!student.active));
+
+        actions.append(saveBtn, activeBtn);
+        actionCell.appendChild(actions);
+        row.append(rosterCell, nameCell, markerCell, statusCell, actionCell);
+        studentsBody.appendChild(row);
+      }
+
+      prepareNewStudentDefaults();
+    }
+
+    async function loadClasses(preferredClassUuid = selectedClassUuid) {
+      classes = await invoke('list_classes');
+      if (preferredClassUuid && classes.some(item => item.classUuid === preferredClassUuid)) {
+        selectedClassUuid = preferredClassUuid;
+      } else if (classes.length) {
+        selectedClassUuid = classes[0].classUuid;
+      } else {
+        selectedClassUuid = null;
+      }
+      renderClasses();
+    }
+
+    async function selectClass(classUuid) {
+      selectedClassUuid = classUuid;
+      renderClasses();
+      await reloadSelectedClass();
+    }
+
+    async function reloadSelectedClass() {
+      const item = selectedClass();
+
+      if (!item) {
+        students = [];
+        noClass.hidden = false;
+        classWorkspace.hidden = true;
+        return;
+      }
+
+      noClass.hidden = true;
+      classWorkspace.hidden = false;
+      classLabel.value = item.label;
+      schoolYear.value = item.schoolYear || '';
+      students = await invoke('list_students', { classUuid: item.classUuid });
+      renderStudents();
+      await loadClasses(item.classUuid);
+    }
+
+    newClassForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      setMessage(classMessage, '');
+
+      try {
+        const created = await invoke('create_class', {
+          label: newClassLabel.value.trim(),
+          schoolYear: newSchoolYear.value.trim() || null
+        });
+        newClassForm.reset();
+        await loadClasses(created.classUuid);
+        await reloadSelectedClass();
+      } catch (error) {
+        setMessage(classMessage, errorText(error), 'error');
+      }
+    });
+
+    saveClassBtn.addEventListener('click', async () => {
+      const item = selectedClass();
+      if (!item) return;
+      setMessage(workspaceMessage, '');
+
+      try {
+        await invoke('update_class', {
+          classUuid: item.classUuid,
+          label: classLabel.value.trim(),
+          schoolYear: schoolYear.value.trim() || null
+        });
+        await loadClasses(item.classUuid);
+        await reloadSelectedClass();
+        setMessage(workspaceMessage, 'Classe aggiornata.', 'ok');
+      } catch (error) {
+        setMessage(workspaceMessage, errorText(error), 'error');
+      }
+    });
+
+    newStudentForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      const item = selectedClass();
+      if (!item) return;
+      setMessage(studentMessage, '');
+
+      try {
+        await invoke('create_student', {
+          classUuid: item.classUuid,
+          rosterNumber: Number.parseInt(newRoster.value, 10),
+          markerNumber: newMarker.value ? Number.parseInt(newMarker.value, 10) : null,
+          displayName: newStudentName.value.trim()
+        });
+        newStudentName.value = '';
+        await reloadSelectedClass();
+        newStudentName.focus();
+      } catch (error) {
+        setMessage(studentMessage, errorText(error), 'error');
+      }
+    });
+
+    backBtn.addEventListener('click', () => {
+      if (window.history.length > 1) window.history.back();
+      else window.location.assign('index.html');
+    });
+
+    async function initialize() {
+      try {
+        const unlocked = await invoke('store_unlocked');
+        if (!unlocked) {
+          window.location.replace('index.html');
+          return;
+        }
+
+        await loadClasses();
+        if (selectedClassUuid) await reloadSelectedClass();
+
+        loading.hidden = true;
+        content.hidden = false;
+      } catch (error) {
+        loading.hidden = true;
+        fatal.hidden = false;
+        fatalMessage.textContent = errorText(error);
+      }
+    }
+
+    initialize();
+  </script>
+</body>
+</html>
