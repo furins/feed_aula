@@ -12,14 +12,14 @@
       --muted: #6f7890;
       --panel: rgba(255, 255, 255, .94);
       --line: #dfe5f2;
-      --accent: #6d5dfc;
-      --accent-2: #8d7fff;
-      --accent-soft: #eeebff;
-      --ok: #24b36b;
-      --ok-soft: #e8f8ef;
-      --warn: #f2a91f;
+      --accent: #418184;
+      --accent-2: #6d9d69;
+      --accent-soft: #e8f1ef;
+      --ok: #6d9d69;
+      --ok-soft: #eaf3e8;
+      --warn: #cba150;
       --danger: #e34f62;
-      --sky: #4aa8ff;
+      --sky: #79a7a8;
       --shadow: 0 14px 36px rgba(69, 73, 120, .12);
     }
 
@@ -33,15 +33,37 @@
       font-family: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--ink);
       background:
-        radial-gradient(circle at 8% 5%, rgba(255, 210, 92, .26), transparent 24rem),
-        radial-gradient(circle at 94% 12%, rgba(74, 168, 255, .20), transparent 25rem),
-        radial-gradient(circle at 78% 92%, rgba(141, 127, 255, .18), transparent 28rem),
-        linear-gradient(145deg, #f8fbff 0%, #f7f4ff 48%, #fff9f0 100%);
+        radial-gradient(circle at 8% 5%, rgba(203, 161, 80, .18), transparent 24rem),
+        radial-gradient(circle at 94% 12%, rgba(65, 129, 132, .17), transparent 25rem),
+        radial-gradient(circle at 78% 92%, rgba(109, 157, 105, .15), transparent 28rem),
+        linear-gradient(145deg, #f8fbfa 0%, #f5f9f7 48%, #fdfaf3 100%);
     }
 
     main {
       width: min(1320px, calc(100% - 32px));
       margin: 24px auto 40px;
+    }
+
+    .page-nav {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .back-button {
+      min-height: 40px;
+      padding: 8px 13px;
+      border: 1px solid #b7d1ce;
+      border-radius: 12px;
+      background: #e8f1ef;
+      color: #2f6265;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 5px 13px rgba(48, 52, 83, .05);
+    }
+
+    .back-button:hover:not(:disabled) {
+      background: #dcebe8;
     }
 
     .panel {
@@ -62,7 +84,7 @@
       width: 120px;
       height: 120px;
       border-radius: 50%;
-      background: rgba(109, 93, 252, .055);
+      background: rgba(65, 129, 132, .055);
       right: -58px;
       top: -64px;
       pointer-events: none;
@@ -104,8 +126,8 @@
 
     input:focus,
     select:focus {
-      border-color: #a99fff;
-      box-shadow: 0 0 0 4px rgba(109, 93, 252, .10);
+      border-color: #79a7a8;
+      box-shadow: 0 0 0 4px rgba(65, 129, 132, .14);
     }
 
     button {
@@ -170,9 +192,9 @@
     }
 
     .status-row .status-main {
-      color: #5343d9;
+      color: #326d70;
       background: var(--accent-soft);
-      border-color: #ded8ff;
+      border-color: #b7d1ce;
       font-weight: 850;
     }
 
@@ -221,7 +243,7 @@
       font-size: clamp(2rem, 5vw, 4.6rem);
       line-height: 1.05;
       letter-spacing: -.035em;
-      color: #372d78;
+      color: #2f6265;
       text-wrap: balance;
     }
 
@@ -661,6 +683,10 @@
 
 <body>
   <main>
+    <nav class="page-nav" aria-label="Navigazione">
+      <button id="backBtn" class="back-button" type="button">← Indietro</button>
+    </nav>
+
     <header class="presentation-header" id="presentationHeader" hidden>
       <h1 class="presentation-title" id="presentationTitle">Questionario</h1>
       <button id="presentationStopBtn" class="stop" type="button">Ferma</button>
@@ -767,8 +793,9 @@
     const MAX_COUNT = 30;
     const SCAN_PAUSE_MS = 700;
     const ROTATIONS = [0, 90, 180, 270];
-    const CHART_COLORS = ['#6d5dfc', '#f2ad28', '#25b86d', '#47a9ff', '#e66b83', '#8e99ad'];
+    const CHART_COLORS = ['#418184', '#cba150', '#6d9d69', '#79a7a8', '#b86b65', '#8e99ad'];
 
+    const backBtn = document.getElementById('backBtn');
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -1009,7 +1036,7 @@
 
     function initDetector() {
       if (!window.AR || !AR.DICTIONARIES || !AR.DICTIONARIES.ARUCO_4X4_1000) {
-        throw new Error('Libreria ArUco non caricata. Verificare la connessione Internet.');
+        throw new Error('Modulo di riconoscimento dei marker non disponibile. Riavvia FEED.');
       }
 
       AR.DICTIONARIES.ARUCO_4X4_50_LOCAL = {
@@ -1379,6 +1406,19 @@
       setMessage(reason, kind);
     }
 
+    function leaveScan() {
+      if (scanning) {
+        stopScanning('Scansione annullata');
+      } else {
+        if (scanTimer) clearTimeout(scanTimer);
+        scanTimer = null;
+        stopTracks();
+      }
+
+      if (window.history.length > 1) window.history.back();
+      else window.location.assign('index.html');
+    }
+
     async function waitForVideoDimensions() {
       if (video.videoWidth && video.videoHeight) return;
       await new Promise((resolve, reject) => {
@@ -1392,7 +1432,12 @@
 
     async function startScanning() {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setMessage('Questo browser non espone l’API della telecamera. Aprire la pagina da HTTPS o localhost.', 'error');
+        setMessage(
+          window.__TAURI__
+            ? 'FEED non riesce ad accedere all’API della telecamera in questo ambiente.'
+            : 'Questo browser non espone l’API della telecamera. Aprire la pagina da HTTPS o localhost.',
+          'error'
+        );
         return;
       }
 
@@ -1458,11 +1503,17 @@
     function humanCameraError(err) {
       if (!err) return 'Errore sconosciuto.';
       switch (err.name) {
-        case 'NotAllowedError': return 'Accesso alla telecamera negato. Concedere il permesso al browser.';
+        case 'NotAllowedError':
+          return window.__TAURI__
+            ? 'Accesso alla telecamera negato. Verifica il permesso fotocamera assegnato a FEED.'
+            : 'Accesso alla telecamera negato. Concedere il permesso al browser.';
         case 'NotFoundError': return 'Nessuna telecamera disponibile.';
         case 'OverconstrainedError': return `La telecamera non soddisfa i vincoli richiesti (${err.constraint || 'video'}).`;
         case 'NotReadableError': return 'La telecamera è occupata o non può essere letta.';
-        case 'SecurityError': return 'Accesso alla telecamera bloccato dal contesto di sicurezza. Usare HTTPS o localhost.';
+        case 'SecurityError':
+          return window.__TAURI__
+            ? 'Accesso alla telecamera bloccato dal sistema o dalla WebView di FEED.'
+            : 'Accesso alla telecamera bloccato dal contesto di sicurezza. Usare HTTPS o localhost.';
         default: return err.message || String(err);
       }
     }
@@ -1604,6 +1655,7 @@
       exportCsv({ withTimestamp: true });
     }
 
+    backBtn.addEventListener('click', leaveScan);
     startBtn.addEventListener('click', startScanning);
     stopBtn.addEventListener('click', () => stopScanning('Interrotta manualmente'));
     presentationStopBtn.addEventListener('click', () => stopPresentation('Interrotta manualmente'));

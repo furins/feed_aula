@@ -12,14 +12,14 @@
       --muted: #6f7890;
       --panel: rgba(255, 255, 255, .96);
       --line: #dfe5f2;
-      --accent: #6d5dfc;
-      --accent-2: #8d7fff;
-      --accent-soft: #eeebff;
-      --ok: #24b36b;
-      --ok-soft: #e8f8ef;
-      --warn: #f2a91f;
+      --accent: #418184;
+      --accent-2: #6d9d69;
+      --accent-soft: #e8f1ef;
+      --ok: #6d9d69;
+      --ok-soft: #eaf3e8;
+      --warn: #cba150;
       --danger: #e34f62;
-      --sky: #4aa8ff;
+      --sky: #79a7a8;
       --shadow: 0 14px 36px rgba(69, 73, 120, .12);
     }
 
@@ -33,16 +33,38 @@
       font-family: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--ink);
       background:
-        radial-gradient(circle at 8% 5%, rgba(255, 210, 92, .25), transparent 24rem),
-        radial-gradient(circle at 94% 12%, rgba(74, 168, 255, .20), transparent 25rem),
-        radial-gradient(circle at 78% 92%, rgba(141, 127, 255, .18), transparent 28rem),
-        linear-gradient(145deg, #f8fbff 0%, #f7f4ff 48%, #fff9f0 100%);
+        radial-gradient(circle at 8% 5%, rgba(203, 161, 80, .18), transparent 24rem),
+        radial-gradient(circle at 94% 12%, rgba(65, 129, 132, .17), transparent 25rem),
+        radial-gradient(circle at 78% 92%, rgba(109, 157, 105, .15), transparent 28rem),
+        linear-gradient(145deg, #f8fbfa 0%, #f5f9f7 48%, #fdfaf3 100%);
     }
 
     main {
       width: min(1080px, calc(100% - 32px));
       margin: 0 auto;
       padding: 34px 0 52px;
+    }
+
+    .page-nav {
+      display: flex;
+      align-items: center;
+      margin-bottom: 14px;
+      padding: 0 4px;
+    }
+
+    .back-button {
+      min-height: 40px;
+      padding: 8px 13px;
+      border: 1px solid #b7d1ce;
+      border-radius: 12px;
+      background: #e8f1ef;
+      color: #2f6265;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .back-button:hover {
+      background: #dcebe8;
     }
 
     header {
@@ -123,8 +145,8 @@
     input:focus,
     select:focus,
     textarea:focus {
-      border-color: var(--accent-2);
-      box-shadow: 0 0 0 4px rgba(109, 93, 252, .10);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(65, 129, 132, .14);
     }
 
     textarea {
@@ -181,8 +203,8 @@
     .angle {
       align-self: center;
       font-weight: 850;
-      background: var(--accent-soft);
-      color: #5748dd;
+      background: #f7f0df;
+      color: #7b622c;
       border-radius: 12px;
       padding: 10px 11px;
       text-align: center;
@@ -210,8 +232,7 @@
       grid-row: span 2;
     }
 
-    button,
-    .button-link {
+    button {
       border: 0;
       border-radius: 14px;
       padding: 11px 15px;
@@ -226,29 +247,27 @@
       white-space: nowrap;
     }
 
-    button:hover,
-    .button-link:hover {
+    button:hover {
       transform: translateY(-1px);
     }
 
-    button:active,
-    .button-link:active {
+    button:active {
       transform: translateY(0);
     }
 
     .primary {
       color: #fff;
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      box-shadow: 0 8px 18px rgba(109, 93, 252, .22);
+      box-shadow: 0 8px 18px rgba(65, 129, 132, .20);
     }
 
     .secondary {
-      color: #5748dd;
+      color: #2f6265;
       background: var(--accent-soft);
     }
 
     .success {
-      color: #14854d;
+      color: #3f7148;
       background: var(--ok-soft);
     }
 
@@ -272,7 +291,7 @@
     }
 
     .param-preview code {
-      color: #4e45b8;
+      color: #326d70;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       overflow-wrap: anywhere;
     }
@@ -330,6 +349,10 @@
 
 <body>
   <main>
+    <nav class="page-nav" aria-label="Navigazione">
+      <button id="backBtn" class="back-button" type="button">← Indietro</button>
+    </nav>
+
     <header>
       <h1>Configuratore FEED Scan</h1>
       <p class="subtitle">Prepara un collegamento pronto da usare per il questionario.</p>
@@ -444,7 +467,7 @@
         <div class="url-box">
           <textarea id="generatedUrl" readonly spellcheck="false" aria-label="URL generato"></textarea>
           <button id="copyBtn" class="primary" type="button">Copia URL</button>
-          <a id="openBtn" class="button-link success" href="#" target="_blank" rel="noopener">Apri</a>
+          <button id="openBtn" class="success" type="button">Apri</button>
         </div>
         <div class="copy-status" id="copyStatus" aria-live="polite"></div>
         <div class="param-preview">L'indirizzo viene aggiornato automaticamente a ogni modifica. I caratteri speciali,
@@ -457,6 +480,7 @@
     'use strict';
 
     const form = document.getElementById('configForm');
+    const backBtn = document.getElementById('backBtn');
     const baseUrl = document.getElementById('baseUrl');
     const questionnaireCode = document.getElementById('questionnaireCode');
     const requestTitle = document.getElementById('requestTitle');
@@ -523,7 +547,6 @@
         url = new URL(base, window.location.href);
       } catch (_) {
         generatedUrl.value = base;
-        openBtn.href = base || '#';
         return;
       }
 
@@ -564,7 +587,6 @@
       url.hash = '';
 
       generatedUrl.value = url.href;
-      openBtn.href = url.href;
       copyStatus.textContent = '';
     }
 
@@ -606,7 +628,20 @@
       buildUrl();
     });
 
+    backBtn.addEventListener('click', () => {
+      if (window.history.length > 1) window.history.back();
+      else window.location.assign('index.html');
+    });
+
     copyBtn.addEventListener('click', copyUrl);
+
+    openBtn.addEventListener('click', () => {
+      const target = generatedUrl.value.trim();
+      if (!target) return;
+
+      if (window.__TAURI__) window.location.assign(target);
+      else window.open(target, '_blank', 'noopener');
+    });
 
     generatedUrl.addEventListener('click', () => generatedUrl.select());
   </script>
