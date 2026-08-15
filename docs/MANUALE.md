@@ -11,6 +11,7 @@ I dati sono conservati in modo pseudoanonimizzato e la password, nota solo al do
 
 - Preparazione di post per social network mediante eliminazione di tratti riconoscibili di alunni presenti nelle foto (senza conservare la foto originale) e facilitando l'immissione dei dati e l'invio al responsabile per la comunicazione.
 - Anonimizzazione o rimozione di dati sensibili prima dell'inserimento in servizi online (rimozione o sostituzione con pseudonimo temporaneo di nomi, classi, plessi, dati anagrafici).
+- Estensione alla realizzazione di questionari interattivi offline (inserimento di descrizioni, immagini, risposte personalizzate)
 
 ## Riferimenti
 
