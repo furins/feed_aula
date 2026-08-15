@@ -208,6 +208,27 @@
       cursor: wait;
     }
 
+    .unlock-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+    }
+
+    .unlock-spinner {
+      width: 17px;
+      height: 17px;
+      flex: 0 0 17px;
+      border: 2px solid rgba(255, 255, 255, .45);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: unlock-spin .75s linear infinite;
+    }
+
+    @keyframes unlock-spin {
+      to { transform: rotate(360deg); }
+    }
+
     .message {
       min-height: 1.4em;
       margin-top: 15px;
@@ -392,7 +413,10 @@
         </label>
 
         <div class="actions">
-          <button id="unlockButton" class="primary" type="submit">Sblocca</button>
+          <button id="unlockButton" class="primary unlock-button" type="submit">
+            <span id="unlockSpinner" class="unlock-spinner" aria-hidden="true" hidden></span>
+            <span id="unlockButtonLabel">Sblocca</span>
+          </button>
         </div>
         <div id="unlockMessage" class="message"></div>
       </form>
@@ -462,6 +486,8 @@
 
     const unlockPassword = document.getElementById('unlockPassword');
     const unlockButton = document.getElementById('unlockButton');
+    const unlockSpinner = document.getElementById('unlockSpinner');
+    const unlockButtonLabel = document.getElementById('unlockButtonLabel');
     const unlockMessage = document.getElementById('unlockMessage');
 
     const lockToggle = document.getElementById('lockToggle');
@@ -490,6 +516,13 @@
     function setBusy(button, busy) {
       button.disabled = busy;
       button.setAttribute('aria-busy', String(busy));
+    }
+
+    function setUnlockBusy(busy) {
+      setBusy(unlockButton, busy);
+      unlockPassword.disabled = busy;
+      unlockSpinner.hidden = !busy;
+      unlockButtonLabel.textContent = busy ? 'Sblocco…' : 'Sblocca';
     }
 
     function setLockState(unlocked, visible = true) {
@@ -600,7 +633,11 @@
     unlockForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       setMessage(unlockMessage, '');
-      setBusy(unlockButton, true);
+      setUnlockBusy(true);
+
+      // Lascia alla WebView un fotogramma per mostrare lo spinner prima
+      // dell'operazione crittografica più costosa.
+      await new Promise(resolve => requestAnimationFrame(resolve));
 
       try {
         await invoke('unlock_store', { password: unlockPassword.value });
@@ -609,7 +646,7 @@
         unlockPassword.select();
         setMessage(unlockMessage, String(error), 'error');
       } finally {
-        setBusy(unlockButton, false);
+        setUnlockBusy(false);
       }
     });
 

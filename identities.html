@@ -158,6 +158,7 @@
     .primary:hover:not(:disabled) { background: var(--accent-dark); }
     .secondary { background: var(--accent-soft); color: var(--accent-dark); }
     .success { background: var(--green-soft); color: #426d45; }
+    .warning { background: var(--gold-soft); color: #715a28; }
     .danger { background: var(--danger-soft); color: var(--danger); }
 
     .class-list {
@@ -204,6 +205,15 @@
       font-size: .88rem;
     }
 
+    .class-fields {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) minmax(150px, .7fr);
+      gap: 10px;
+      align-items: end;
+    }
+
+    .class-fields .field { margin-top: 0; }
+
     .student-form {
       display: grid;
       grid-template-columns: 110px minmax(180px, 1fr) 130px auto;
@@ -222,7 +232,7 @@
       width: 100%;
       border-collapse: separate;
       border-spacing: 0 8px;
-      min-width: 720px;
+      min-width: 790px;
     }
 
     th {
@@ -252,7 +262,7 @@
       border-radius: 0 13px 13px 0;
     }
 
-    tr.inactive td { opacity: .7; }
+    tr.inactive td { opacity: .72; }
 
     td input, td select {
       min-height: 38px;
@@ -300,11 +310,13 @@
 
     .message.error { color: var(--danger); }
     .message.ok { color: #426d45; }
+    .message.saving { color: var(--muted); }
 
     [hidden] { display: none !important; }
 
     @media (max-width: 880px) {
       .layout { grid-template-columns: 1fr; }
+      .class-fields { grid-template-columns: 1fr 1fr; }
       .student-form { grid-template-columns: 100px 1fr 120px; }
       .student-form button { grid-column: 1 / -1; }
     }
@@ -313,6 +325,7 @@
       .shell { width: min(100% - 20px, 1180px); padding-top: 20px; }
       .topbar { align-items: flex-start; }
       .brand-icon { display: none; }
+      .class-fields,
       .student-form { grid-template-columns: 1fr; }
       .student-form button { grid-column: auto; }
       .panel { padding: 16px; border-radius: 18px; }
@@ -363,7 +376,7 @@
         <div id="classWorkspace" hidden>
           <section class="panel">
             <h2>Dati della classe</h2>
-            <div class="student-form" style="grid-template-columns:minmax(180px,1fr) minmax(150px,.7fr) auto">
+            <div class="class-fields">
               <label class="field">
                 Classe
                 <input id="classLabel" type="text" maxlength="80" />
@@ -372,8 +385,8 @@
                 Anno scolastico
                 <input id="schoolYear" type="text" maxlength="20" />
               </label>
-              <button id="saveClassBtn" class="secondary" type="button">Salva</button>
             </div>
+            <p class="note">Le modifiche vengono salvate automaticamente.</p>
             <div id="workspaceMessage" class="message"></div>
           </section>
 
@@ -403,6 +416,11 @@
 
           <section class="panel">
             <h2>Alunni</h2>
+            <p class="note">
+              Nominativo, numero d’appello e marker vengono salvati automaticamente.
+              Usa <strong>Disattiva</strong> se l’alunno lascia la classe; usa
+              <strong>Elimina</strong> solo per correggere un inserimento errato.
+            </p>
             <div id="studentsEmpty" class="empty" hidden>Nessun alunno in questa classe.</div>
             <div id="studentsTable" class="table-wrap" hidden>
               <table>
@@ -432,6 +450,8 @@
   <script>
     'use strict';
 
+    const AUTO_SAVE_DELAY_MS = 650;
+
     const backBtn = document.getElementById('backBtn');
     const loading = document.getElementById('loading');
     const content = document.getElementById('content');
@@ -448,7 +468,6 @@
     const classWorkspace = document.getElementById('classWorkspace');
     const classLabel = document.getElementById('classLabel');
     const schoolYear = document.getElementById('schoolYear');
-    const saveClassBtn = document.getElementById('saveClassBtn');
     const workspaceMessage = document.getElementById('workspaceMessage');
 
     const newStudentForm = document.getElementById('newStudentForm');
@@ -465,6 +484,8 @@
     let classes = [];
     let students = [];
     let selectedClassUuid = null;
+    let classSaveTimer = null;
+    let savedMessageTimer = null;
 
     function invoke(command, args) {
       const tauriInvoke = window.__TAURI__?.core?.invoke;
@@ -481,6 +502,14 @@
     function setMessage(element, text = '', kind = '') {
       element.textContent = text;
       element.className = `message ${kind}`.trim();
+    }
+
+    function showSaved(element, text = 'Salvato automaticamente.') {
+      if (savedMessageTimer) clearTimeout(savedMessageTimer);
+      setMessage(element, text, 'ok');
+      savedMessageTimer = setTimeout(() => {
+        if (element.textContent === text) setMessage(element, '');
+      }, 1700);
     }
 
     function selectedClass() {
@@ -574,6 +603,57 @@
         .replace(/'/g, '&#039;');
     }
 
+    async function saveClassNow(classUuid, label, year) {
+      if (!classUuid) return;
+      setMessage(workspaceMessage, 'Salvataggio…', 'saving');
+
+      try {
+        const updated = await invoke('update_class', {
+          classUuid,
+          label: label.trim(),
+          schoolYear: year.trim() || null
+        });
+
+        const index = classes.findIndex(item => item.classUuid === classUuid);
+        if (index >= 0) {
+          classes[index] = updated;
+          renderClasses();
+        }
+        showSaved(workspaceMessage);
+      } catch (error) {
+        setMessage(workspaceMessage, errorText(error), 'error');
+      }
+    }
+
+    function scheduleClassSave() {
+      const classUuid = selectedClassUuid;
+      const label = classLabel.value;
+      const year = schoolYear.value;
+
+      if (!classUuid) return;
+      if (classSaveTimer) clearTimeout(classSaveTimer);
+
+      setMessage(workspaceMessage, 'Salvataggio…', 'saving');
+      classSaveTimer = setTimeout(() => {
+        classSaveTimer = null;
+        saveClassNow(classUuid, label, year);
+      }, AUTO_SAVE_DELAY_MS);
+    }
+
+    function flushClassSave() {
+      if (!selectedClassUuid) return;
+      if (classSaveTimer) {
+        clearTimeout(classSaveTimer);
+        classSaveTimer = null;
+      }
+      saveClassNow(selectedClassUuid, classLabel.value, schoolYear.value);
+    }
+
+    function updateLocalStudent(updated) {
+      const index = students.findIndex(item => item.studentUuid === updated.studentUuid);
+      if (index >= 0) students[index] = updated;
+    }
+
     function renderStudents() {
       studentsBody.innerHTML = '';
       const hasStudents = students.length > 0;
@@ -620,40 +700,97 @@
         const actions = document.createElement('div');
         actions.className = 'student-actions';
 
-        const saveBtn = document.createElement('button');
-        saveBtn.type = 'button';
-        saveBtn.className = 'secondary';
-        saveBtn.textContent = 'Salva';
-
         const activeBtn = document.createElement('button');
         activeBtn.type = 'button';
-        activeBtn.className = student.active ? 'danger' : 'success';
+        activeBtn.className = student.active ? 'warning' : 'success';
         activeBtn.textContent = student.active ? 'Disattiva' : 'Riattiva';
 
-        async function save(active) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'danger';
+        deleteBtn.textContent = 'Elimina';
+
+        let saveTimer = null;
+        let saveQueue = Promise.resolve();
+
+        function payload(active = student.active) {
+          return {
+            studentUuid: student.studentUuid,
+            rosterNumber: Number.parseInt(rosterInput.value, 10),
+            markerNumber: markerSelect.value ? Number.parseInt(markerSelect.value, 10) : null,
+            displayName: nameInput.value.trim(),
+            active
+          };
+        }
+
+        function persist(active = student.active, reload = false) {
+          if (saveTimer) {
+            clearTimeout(saveTimer);
+            saveTimer = null;
+          }
+
+          const currentPayload = payload(active);
+          setMessage(studentMessage, 'Salvataggio…', 'saving');
+
+          saveQueue = saveQueue.then(async () => {
+            try {
+              const updated = await invoke('update_student', currentPayload);
+              updateLocalStudent(updated);
+
+              if (reload) {
+                await reloadSelectedClass();
+              } else {
+                showSaved(studentMessage);
+              }
+            } catch (error) {
+              setMessage(studentMessage, errorText(error), 'error');
+            }
+          });
+
+          return saveQueue;
+        }
+
+        function scheduleNameSave() {
+          if (saveTimer) clearTimeout(saveTimer);
+          setMessage(studentMessage, 'Salvataggio…', 'saving');
+          saveTimer = setTimeout(() => {
+            saveTimer = null;
+            persist(student.active, false);
+          }, AUTO_SAVE_DELAY_MS);
+        }
+
+        nameInput.addEventListener('input', scheduleNameSave);
+        nameInput.addEventListener('change', () => persist(student.active, false));
+        rosterInput.addEventListener('change', () => persist(student.active, true));
+        markerSelect.addEventListener('change', () => persist(student.active, true));
+        activeBtn.addEventListener('click', () => persist(!student.active, true));
+
+        deleteBtn.addEventListener('click', async () => {
+          if (saveTimer) {
+            clearTimeout(saveTimer);
+            saveTimer = null;
+          }
+
+          const confirmed = window.confirm(
+            `Eliminare definitivamente ${student.displayName}?\n\n` +
+            'Usa questa funzione solo per correggere un inserimento errato. ' +
+            'Se esistono già risposte storiche, FEED impedirà l’eliminazione.'
+          );
+          if (!confirmed) return;
+
+          await saveQueue;
           setMessage(studentMessage, '');
-          const rosterNumber = Number.parseInt(rosterInput.value, 10);
-          const markerNumber = markerSelect.value ? Number.parseInt(markerSelect.value, 10) : null;
-          const displayName = nameInput.value.trim();
 
           try {
-            await invoke('update_student', {
-              studentUuid: student.studentUuid,
-              rosterNumber,
-              markerNumber,
-              displayName,
-              active
-            });
+            await invoke('delete_student', { studentUuid: student.studentUuid });
             await reloadSelectedClass();
+            showSaved(studentMessage, 'Alunno eliminato.');
           } catch (error) {
             setMessage(studentMessage, errorText(error), 'error');
           }
-        }
+        });
 
-        saveBtn.addEventListener('click', () => save(student.active));
-        activeBtn.addEventListener('click', () => save(!student.active));
-
-        actions.append(saveBtn, activeBtn);
+        actions.append(activeBtn, deleteBtn);
         actionCell.appendChild(actions);
         row.append(rosterCell, nameCell, markerCell, statusCell, actionCell);
         studentsBody.appendChild(row);
@@ -716,24 +853,10 @@
       }
     });
 
-    saveClassBtn.addEventListener('click', async () => {
-      const item = selectedClass();
-      if (!item) return;
-      setMessage(workspaceMessage, '');
-
-      try {
-        await invoke('update_class', {
-          classUuid: item.classUuid,
-          label: classLabel.value.trim(),
-          schoolYear: schoolYear.value.trim() || null
-        });
-        await loadClasses(item.classUuid);
-        await reloadSelectedClass();
-        setMessage(workspaceMessage, 'Classe aggiornata.', 'ok');
-      } catch (error) {
-        setMessage(workspaceMessage, errorText(error), 'error');
-      }
-    });
+    classLabel.addEventListener('input', scheduleClassSave);
+    schoolYear.addEventListener('input', scheduleClassSave);
+    classLabel.addEventListener('change', flushClassSave);
+    schoolYear.addEventListener('change', flushClassSave);
 
     newStudentForm.addEventListener('submit', async event => {
       event.preventDefault();

@@ -47,7 +47,7 @@ impl Default for StoreState {
 }
 
 struct EncryptedStore {
-    _data: Connection,
+    data: Connection,
     identities: Connection,
 }
 
@@ -567,7 +567,7 @@ fn create_new_store(app: &AppHandle, password: &str) -> Result<EncryptedStore, S
         write_key_envelope(&keys_path, &envelope)?;
 
         Ok(EncryptedStore {
-            _data: data,
+            data: data,
             identities,
         })
     })();
@@ -600,7 +600,7 @@ fn open_existing_store(app: &AppHandle, password: &str) -> Result<EncryptedStore
     create_identity_schema(&identities)?;
 
     Ok(EncryptedStore {
-        _data: data,
+        data: data,
         identities,
     })
 }
@@ -879,6 +879,40 @@ fn move_active_student(
             params![student_uuid, new_roster],
         )
         .map_err(|error| format!("Impossibile assegnare il nuovo numero d'appello: {error}"))?;
+
+    Ok(())
+}
+
+/// Chiude il vuoto lasciato dall'eliminazione di un alunno attivo.
+///
+/// L'offset temporaneo evita collisioni con l'indice univoco sui numeri
+/// d'appello mentre gli alunni successivi vengono spostati indietro di uno.
+fn close_roster_gap(
+    transaction: &Transaction<'_>,
+    class_uuid: &str,
+    deleted_roster_number: i64,
+) -> Result<(), String> {
+    transaction
+        .execute(
+            "UPDATE students
+             SET roster_number = roster_number + ?3
+             WHERE class_uuid = ?1
+               AND active = 1
+               AND roster_number > ?2",
+            params![class_uuid, deleted_roster_number, ROSTER_SHIFT],
+        )
+        .map_err(|error| format!("Impossibile preparare la rinumerazione: {error}"))?;
+
+    transaction
+        .execute(
+            "UPDATE students
+             SET roster_number = roster_number - ?3 - 1
+             WHERE class_uuid = ?1
+               AND active = 1
+               AND roster_number > ?2 + ?3",
+            params![class_uuid, deleted_roster_number, ROSTER_SHIFT],
+        )
+        .map_err(|error| format!("Impossibile completare la rinumerazione: {error}"))?;
 
     Ok(())
 }
@@ -1166,6 +1200,70 @@ pub fn update_student(
 
         load_student(connection, &student_uuid)
     })
+}
+
+#[tauri::command]
+/// Elimina definitivamente un alunno creato per errore solo se non possiede risposte storiche.
+///
+/// Se `feed.db` contiene almeno una risposta collegata allo UUID dell'alunno,
+/// l'eliminazione viene rifiutata e l'utente deve usare la disattivazione.
+/// In questo modo lo storico pseudonimizzato non resta privo della
+/// corrispondenza conservata nel database delle identità.
+pub fn delete_student(student_uuid: String, state: State<'_, StoreState>) -> Result<(), String> {
+    let mut guard = state
+        .inner
+        .lock()
+        .map_err(|_| "Stato del database non disponibile.".to_string())?;
+    let store = guard
+        .as_mut()
+        .ok_or_else(|| "FEED è bloccato. Sblocca l'archivio per continuare.".to_string())?;
+
+    let has_history = store
+        .data
+        .query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM responses WHERE student_uuid = ?1 LIMIT 1
+             )",
+            [student_uuid.as_str()],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(|error| format!("Impossibile verificare lo storico dell'alunno: {error}"))?
+        == 1;
+
+    if has_history {
+        return Err(
+            "Questo alunno possiede già risposte nello storico e non può essere eliminato. \
+             Usa “Disattiva” per conservarne correttamente i dati."
+                .to_string(),
+        );
+    }
+
+    let current = load_student(&store.identities, &student_uuid)?;
+    let transaction = store
+        .identities
+        .transaction()
+        .map_err(|error| format!("Impossibile iniziare l'eliminazione: {error}"))?;
+
+    let deleted = transaction
+        .execute(
+            "DELETE FROM students WHERE student_uuid = ?1",
+            [student_uuid.as_str()],
+        )
+        .map_err(|error| format!("Impossibile eliminare l'alunno: {error}"))?;
+
+    if deleted == 0 {
+        return Err("Alunno non trovato.".to_string());
+    }
+
+    if current.active {
+        close_roster_gap(&transaction, &current.class_uuid, current.roster_number)?;
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("Impossibile completare l'eliminazione: {error}"))?;
+
+    Ok(())
 }
 
 #[tauri::command]
