@@ -1,0 +1,1655 @@
+<!doctype html>
+<html lang="it">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title></title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #25314d;
+      --muted: #6f7890;
+      --panel: rgba(255, 255, 255, .94);
+      --line: #dfe5f2;
+      --accent: #6d5dfc;
+      --accent-2: #8d7fff;
+      --accent-soft: #eeebff;
+      --ok: #24b36b;
+      --ok-soft: #e8f8ef;
+      --warn: #f2a91f;
+      --danger: #e34f62;
+      --sky: #4aa8ff;
+      --shadow: 0 14px 36px rgba(69, 73, 120, .12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 5%, rgba(255, 210, 92, .26), transparent 24rem),
+        radial-gradient(circle at 94% 12%, rgba(74, 168, 255, .20), transparent 25rem),
+        radial-gradient(circle at 78% 92%, rgba(141, 127, 255, .18), transparent 28rem),
+        linear-gradient(145deg, #f8fbff 0%, #f7f4ff 48%, #fff9f0 100%);
+    }
+
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 24px auto 40px;
+    }
+
+    .panel {
+      position: relative;
+      overflow: hidden;
+      background: var(--panel);
+      border: 1px solid rgba(255, 255, 255, .82);
+      border-radius: 22px;
+      padding: 18px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: rgba(109, 93, 252, .055);
+      right: -58px;
+      top: -64px;
+      pointer-events: none;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.45fr) minmax(160px, .85fr) minmax(150px, .8fr) minmax(180px, 1fr) 100px auto auto auto;
+      gap: 11px;
+      align-items: end;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: .88rem;
+      font-weight: 700;
+    }
+
+    input,
+    select,
+    button {
+      min-height: 44px;
+      border-radius: 13px;
+      font: inherit;
+    }
+
+    input,
+    select {
+      width: 100%;
+      padding: 0 12px;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--line);
+      outline: none;
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+
+    input:focus,
+    select:focus {
+      border-color: #a99fff;
+      box-shadow: 0 0 0 4px rgba(109, 93, 252, .10);
+    }
+
+    button {
+      padding: 0 16px;
+      cursor: pointer;
+      border: 1px solid #d9deeb;
+      background: #fff;
+      color: var(--ink);
+      font-weight: 800;
+      white-space: nowrap;
+      box-shadow: 0 5px 13px rgba(48, 52, 83, .06);
+      transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      filter: brightness(1.015);
+      box-shadow: 0 8px 18px rgba(48, 52, 83, .10);
+    }
+
+    button:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    button.primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #fff;
+      border-color: transparent;
+    }
+
+    button.stop {
+      background: #fff0f2;
+      color: #b83045;
+      border-color: #ffd2d9;
+    }
+
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      align-items: center;
+      margin-top: 15px;
+    }
+
+    .status-row>span {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 11px;
+      border-radius: 999px;
+      background: #f5f7fb;
+      border: 1px solid #e7eaf2;
+      color: var(--muted);
+      font-size: .88rem;
+      font-weight: 650;
+    }
+
+    .status-row .status-main {
+      color: #5343d9;
+      background: var(--accent-soft);
+      border-color: #ded8ff;
+      font-weight: 850;
+    }
+
+    .status-row button {
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: 999px;
+      margin-left: auto;
+      font-size: .86rem;
+    }
+
+    .progress {
+      height: 12px;
+      background: #edf0f7;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 13px;
+      border: 1px solid #e2e6f0;
+      padding: 2px;
+    }
+
+    .progress>div {
+      height: 100%;
+      width: 0;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #39c97f, #72dc9f);
+      transition: width .25s ease;
+    }
+
+    .preview-panel[hidden],
+    .chart-panel[hidden],
+    .presentation-header[hidden] {
+      display: none;
+    }
+
+    .presentation-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 10px 4px 22px;
+    }
+
+    .presentation-title {
+      margin: 0;
+      font-size: clamp(2rem, 5vw, 4.6rem);
+      line-height: 1.05;
+      letter-spacing: -.035em;
+      color: #372d78;
+      text-wrap: balance;
+    }
+
+    .presentation-header .stop {
+      min-height: 54px;
+      padding-inline: 22px;
+      font-size: 1.05rem;
+    }
+
+    body.presentation-mode main {
+      width: min(1320px, calc(100% - 36px));
+      margin-top: 22px;
+    }
+
+    body.presentation-mode #configPanel,
+    body.presentation-mode #csvBtn,
+    body.presentation-mode #previewPanel {
+      display: none !important;
+    }
+
+    body.presentation-mode #resultPanel {
+      padding-top: 22px;
+    }
+
+    body.presentation-mode .marker {
+      min-height: 82px;
+    }
+
+    body.presentation-mode .marker .id {
+      min-width: 52px;
+      height: 40px;
+      font-size: 1rem;
+    }
+
+    body.presentation-mode .chart-toolbar {
+      justify-content: flex-end;
+      margin-bottom: 20px;
+    }
+
+    body.presentation-mode .chart-toolbar label {
+      font-size: 1rem;
+    }
+
+    body.presentation-mode .chart-toolbar select {
+      min-height: 50px;
+      min-width: 190px;
+      font-size: 1.05rem;
+      font-weight: 800;
+    }
+
+    .preview-wrap {
+      position: relative;
+      overflow: hidden;
+      border-radius: 17px;
+      background: #111726;
+      border: 1px solid #d8ddea;
+      aspect-ratio: 16 / 9;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+    }
+
+    video {
+      display: none;
+    }
+
+    .empty-preview {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 24px;
+      color: #b5bdd0;
+      pointer-events: none;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .marker {
+      min-height: 70px;
+      border: 1px solid #e4e8f1;
+      border-radius: 17px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 9px;
+      background: linear-gradient(145deg, #ffffff, #fafbff);
+      box-shadow: 0 5px 15px rgba(56, 61, 93, .055);
+      transition: transform .15s ease, border-color .2s ease, background .2s ease;
+    }
+
+    .marker:hover {
+      transform: translateY(-1px);
+    }
+
+    .marker .id {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 48px;
+      height: 34px;
+      padding: 0 9px;
+      border-radius: 10px;
+      background: #f0f2f8;
+      color: #5f6980;
+      font-size: .86rem;
+      font-weight: 850;
+      letter-spacing: .02em;
+    }
+
+    .marker .state-icon {
+      min-width: 2.2rem;
+      text-align: center;
+      font-size: 1.55rem;
+      line-height: 1;
+      font-weight: 900;
+    }
+
+    .marker .pending {
+      color: #a4adbf;
+    }
+
+    .marker.seen {
+      border-color: #b9ebcf;
+      background: linear-gradient(145deg, #ffffff, var(--ok-soft));
+    }
+
+    .marker.seen .id {
+      background: #dff6e9;
+      color: #17814b;
+    }
+
+    .marker.seen .state-icon {
+      color: var(--ok);
+    }
+
+    .marker-value-select {
+      width: min(76%, 280px);
+      min-height: 43px;
+      padding: 0 10px;
+      font-size: 1rem;
+      font-weight: 750;
+      border-radius: 11px;
+      background: #fff;
+    }
+
+    body[data-display-mode="EMOJI"] .marker-value-select {
+      min-height: 56px;
+      font-size: 2rem;
+      text-align: center;
+      text-align-last: center;
+    }
+
+    body[data-display-mode="BOTH"] .marker-value-select {
+      min-height: 48px;
+      font-size: 1.12rem;
+    }
+
+    body.presentation-mode .marker-value-select {
+      width: min(78%, 330px);
+      min-height: 54px;
+      font-size: 1.25rem;
+    }
+
+    body.presentation-mode[data-display-mode="EMOJI"] .marker-value-select {
+      min-height: 70px;
+      font-size: 2.8rem;
+    }
+
+    body.presentation-mode[data-display-mode="BOTH"] .marker-value-select {
+      min-height: 60px;
+      font-size: 1.45rem;
+    }
+
+    .chart-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .chart-toolbar label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chart-toolbar select {
+      width: auto;
+      min-width: 160px;
+    }
+
+    .chart {
+      display: grid;
+      gap: 13px;
+    }
+
+    .chart-row {
+      display: grid;
+      grid-template-columns: minmax(130px, 1.35fr) minmax(180px, 4fr) 48px;
+      gap: 11px;
+      align-items: center;
+    }
+
+    .chart-label {
+      color: var(--ink);
+      overflow-wrap: anywhere;
+      font-weight: 750;
+      font-size: 1.05rem;
+    }
+
+    .pie-label {
+      font-weight: 750;
+      overflow-wrap: anywhere;
+    }
+
+    body[data-display-mode="EMOJI"] .chart-label,
+    body[data-display-mode="EMOJI"] .pie-label {
+      font-size: 2.25rem;
+      line-height: 1.1;
+    }
+
+    body[data-display-mode="BOTH"] .chart-label,
+    body[data-display-mode="BOTH"] .pie-label {
+      font-size: 1.18rem;
+    }
+
+    body.presentation-mode[data-display-mode="EMOJI"] .chart-label,
+    body.presentation-mode[data-display-mode="EMOJI"] .pie-label {
+      font-size: 3rem;
+    }
+
+    body.presentation-mode[data-display-mode="BOTH"] .chart-label,
+    body.presentation-mode[data-display-mode="BOTH"] .pie-label {
+      font-size: 1.55rem;
+    }
+
+    .chart-track {
+      height: 28px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #edf0f7;
+      border: 1px solid #e1e5ee;
+      padding: 3px;
+    }
+
+    .chart-bar {
+      height: 100%;
+      width: 0;
+      border-radius: 999px;
+      transition: width .25s ease;
+    }
+
+    .chart-count {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-weight: 850;
+      font-size: 1.02rem;
+    }
+
+    .chart-empty {
+      padding: 18px;
+      border-radius: 14px;
+      background: #f7f8fc;
+      color: var(--muted);
+      text-align: center;
+      font-weight: 650;
+    }
+
+    .pie-layout {
+      display: grid;
+      grid-template-columns: minmax(240px, 350px) minmax(220px, 1fr);
+      gap: 28px;
+      align-items: center;
+    }
+
+    .pie-chart {
+      width: min(100%, 330px);
+      aspect-ratio: 1;
+      justify-self: center;
+      border-radius: 50%;
+      border: 10px solid rgba(255, 255, 255, .88);
+      background: #edf0f7;
+      box-shadow: 0 8px 24px rgba(66, 70, 110, .12);
+    }
+
+    .pie-legend {
+      display: grid;
+      gap: 11px;
+    }
+
+    .pie-legend-row {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 9px 10px;
+      border-radius: 12px;
+      background: #fafbfe;
+      border: 1px solid #eceef4;
+    }
+
+    .pie-swatch {
+      width: 15px;
+      height: 15px;
+      border-radius: 5px;
+    }
+
+    .pie-value {
+      font-weight: 850;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .message {
+      min-height: 1.4em;
+      margin-top: 10px;
+      font-size: .92rem;
+      font-weight: 650;
+    }
+
+    .message.error {
+      color: var(--danger);
+    }
+
+    .message.ok {
+      color: var(--ok);
+    }
+
+    .result-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin-top: 15px;
+    }
+
+    .result-actions button:nth-child(1) {
+      border-color: #d9d2ff;
+      background: #f4f1ff;
+      color: #5848df;
+    }
+
+    .result-actions button:nth-child(2) {
+      border-color: #cde7ff;
+      background: #eef8ff;
+      color: #2478bd;
+    }
+
+    @media (max-width: 1150px) {
+      .controls {
+        grid-template-columns: 1.4fr 1fr 1fr 1.2fr 100px auto;
+      }
+
+      .grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 780px) {
+      main {
+        width: min(100% - 20px, 1180px);
+        margin-top: 12px;
+      }
+
+      .panel {
+        padding: 14px;
+        border-radius: 18px;
+      }
+
+      .controls {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .controls .wide {
+        grid-column: 1 / -1;
+      }
+
+      .grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .chart-row {
+        grid-template-columns: minmax(105px, 1.5fr) minmax(110px, 3fr) 42px;
+      }
+
+      .pie-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .status-row button {
+        margin-left: 0;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .controls {
+        grid-template-columns: 1fr;
+      }
+
+      .controls .wide {
+        grid-column: auto;
+      }
+
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .marker {
+        min-height: 64px;
+      }
+
+      .chart-row {
+        grid-template-columns: 1fr 42px;
+      }
+
+      .chart-track {
+        grid-column: 1 / -1;
+        grid-row: 2;
+      }
+
+      .marker-value-select {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <header class="presentation-header" id="presentationHeader" hidden>
+      <h1 class="presentation-title" id="presentationTitle">Questionario</h1>
+      <button id="presentationStopBtn" class="stop" type="button">Ferma</button>
+    </header>
+
+    <section class="panel" id="configPanel">
+      <div class="controls">
+        <label class="wide">
+          Titolo richiesta
+          <input id="requestTitle" type="text" maxlength="120" placeholder="Es. Classe 3A - prova 1" />
+        </label>
+
+        <label>
+          Tipo di test
+          <select id="testType">
+            <option value="SI_NO">SI/NO</option>
+            <option value="COMPRENSIONE">Comprensione</option>
+            <option value="COLORI">Colori</option>
+            <option value="VALORI">Valori</option>
+            <option value="EMOZIONI">Emozioni</option>
+            <option value="CUSTOM">Personalizzata</option>
+          </select>
+        </label>
+
+        <label>
+          Visualizzazione
+          <select id="displayMode">
+            <option value="BOTH">Testo + emoji</option>
+            <option value="TEXT">Solo testo</option>
+            <option value="EMOJI">Solo emoji</option>
+          </select>
+        </label>
+
+        <label class="wide">
+          Telecamera
+          <select id="cameraSelect">
+            <option value="">Predefinita</option>
+          </select>
+        </label>
+
+        <label>
+          Codici
+          <input id="markerCount" type="number" min="1" max="30" step="1" value="20" />
+        </label>
+
+        <button id="startBtn" class="primary">Avvia</button>
+        <button id="stopBtn" class="stop" disabled>Interrompi</button>
+        <button id="resetBtn">Azzera</button>
+      </div>
+
+      <div class="status-row">
+        <span class="status-main" id="statusText">Pronto</span>
+        <span id="countText">Rilevati: 0/20</span>
+        <span id="resolutionText">Risoluzione: —</span>
+        <span id="scanTimeText">Ultima analisi: —</span>
+        <button id="previewBtn" type="button">Mostra anteprima</button>
+      </div>
+
+      <div class="progress">
+        <div id="progressBar"></div>
+      </div>
+      <div id="message" class="message"></div>
+    </section>
+
+    <section class="panel preview-panel" id="previewPanel" hidden>
+      <div class="preview-wrap">
+        <canvas id="canvas"></canvas>
+        <div id="emptyPreview" class="empty-preview">Nessun fotogramma acquisito.</div>
+      </div>
+    </section>
+
+    <section class="panel" id="resultPanel">
+      <div class="grid" id="markerGrid"></div>
+      <div class="result-actions">
+        <button id="dataBtn" type="button">Mostra dati</button>
+        <button id="chartBtn" type="button">Mostra grafico</button>
+        <button id="csvBtn" disabled>Scarica CSV</button>
+      </div>
+    </section>
+
+    <section class="panel chart-panel" id="chartPanel" hidden>
+      <div class="chart-toolbar">
+        <label>
+          Tipo di grafico
+          <select id="chartType">
+            <option value="HISTOGRAM">Istogramma</option>
+            <option value="PIE">Areogramma</option>
+          </select>
+        </label>
+      </div>
+      <div id="chart" class="chart"></div>
+    </section>
+
+    <video id="video" autoplay playsinline muted></video>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/js-aruco2@2.0.0/src/cv.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/js-aruco2@2.0.0/src/aruco.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/js-aruco2@2.0.0/src/dictionaries/aruco_4x4_1000.js"></script>
+
+  <script>
+    'use strict';
+
+    const MAX_COUNT = 30;
+    const SCAN_PAUSE_MS = 700;
+    const ROTATIONS = [0, 90, 180, 270];
+    const CHART_COLORS = ['#6d5dfc', '#f2ad28', '#25b86d', '#47a9ff', '#e66b83', '#8e99ad'];
+
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    const requestTitle = document.getElementById('requestTitle');
+    const presentationHeader = document.getElementById('presentationHeader');
+    const presentationTitle = document.getElementById('presentationTitle');
+    const presentationStopBtn = document.getElementById('presentationStopBtn');
+    const testType = document.getElementById('testType');
+    const displayMode = document.getElementById('displayMode');
+    const markerCount = document.getElementById('markerCount');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const csvBtn = document.getElementById('csvBtn');
+    const dataBtn = document.getElementById('dataBtn');
+    const chartBtn = document.getElementById('chartBtn');
+    const chartPanel = document.getElementById('chartPanel');
+    const chart = document.getElementById('chart');
+    const chartType = document.getElementById('chartType');
+    const previewBtn = document.getElementById('previewBtn');
+    const previewPanel = document.getElementById('previewPanel');
+
+    const statusText = document.getElementById('statusText');
+    const countText = document.getElementById('countText');
+    const resolutionText = document.getElementById('resolutionText');
+    const scanTimeText = document.getElementById('scanTimeText');
+    const progressBar = document.getElementById('progressBar');
+    const message = document.getElementById('message');
+    const markerGrid = document.getElementById('markerGrid');
+    const emptyPreview = document.getElementById('emptyPreview');
+
+    let stream = null;
+    let scanning = false;
+    let scanTimer = null;
+    let detector = null;
+    let startedAt = null;
+    let expectedCount = 20;
+    let scanTitle = '';
+    let scanTestType = 'SI_NO';
+    let scanCustomLegend = null;
+    let hasScanContext = false;
+    let state = [];
+    let showData = false;
+    let showChart = false;
+    let presentationMode = false;
+    let questionnaireCode = '';
+    let customLegend = makeEmptyCustomLegend('Personalizzata');
+
+    const TEST_LEGENDS = {
+      SI_NO: {
+        label: 'SI/NO',
+        values: {
+          0: { text: 'NO', emoji: '❌' },
+          90: { text: 'NI', emoji: '💬' },
+          180: { text: 'SI', emoji: '✅' },
+          270: { text: '?', emoji: '❔' }
+        }
+      },
+      COMPRENSIONE: {
+        label: 'Comprensione',
+        values: {
+          0: { text: 'Non ho capito', emoji: '🫤' },
+          90: { text: 'Non mi è chiaro', emoji: '😐' },
+          180: { text: 'Ho capito', emoji: '🙂' },
+          270: { text: 'Devo fare una domanda', emoji: '🤔' }
+        }
+      },
+      COLORI: {
+        label: 'Colori',
+        values: {
+          0: { text: 'Rosso', emoji: '🔴' },
+          90: { text: 'Giallo', emoji: '🟡' },
+          180: { text: 'Verde', emoji: '🟢' },
+          270: { text: 'Azzurro', emoji: '🔵' }
+        }
+      },
+      VALORI: {
+        label: 'Valori',
+        values: {
+          0: { text: '1', emoji: '1️⃣' },
+          90: { text: '2', emoji: '2️⃣' },
+          180: { text: '3', emoji: '3️⃣' },
+          270: { text: '4', emoji: '4️⃣' }
+        }
+      },
+      EMOZIONI: {
+        label: 'Emozioni',
+        values: {
+          0: { text: 'Triste', emoji: '🫤' },
+          90: { text: 'Medio', emoji: '😐' },
+          180: { text: 'Felice', emoji: '🙂' },
+          270: { text: 'Indeciso', emoji: '🤔' }
+        }
+      }
+    };
+
+    function makeEmptyCustomLegend(label = 'Personalizzata') {
+      return {
+        label,
+        values: Object.fromEntries(ROTATIONS.map(rotation => [rotation, { text: 'N.A.', emoji: '' }]))
+      };
+    }
+
+    function normalizeTestAlias(raw) {
+      return raw
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, '_');
+    }
+
+    function firstParam(params, names) {
+      for (const name of names) {
+        if (params.has(name)) return params.get(name);
+      }
+      return null;
+    }
+
+    function booleanParam(params, names, fallback = false) {
+      const raw = firstParam(params, names);
+      if (raw === null) return fallback;
+      const value = raw.trim().toLowerCase();
+      if (['1', 'true', 'si', 'sì', 'yes', 'on'].includes(value)) return true;
+      if (['0', 'false', 'no', 'off'].includes(value)) return false;
+      return fallback;
+    }
+
+    function readUrlParameters() {
+      const params = new URLSearchParams(window.location.search);
+
+      questionnaireCode = (firstParam(params, ['codice', 'questionario', 'codiceQuestionario']) || '').trim().slice(0, 60);
+      showData = booleanParam(params, ['dati', 'mostraDati', 'mostradati'], false);
+      showChart = booleanParam(params, ['grafico', 'mostraGrafico', 'mostragrafico'], false);
+      presentationMode = booleanParam(params, ['presentazione', 'presentation'], false);
+
+      const title = (params.get('titolo') || '').trim();
+      if (title) requestTitle.value = title.slice(0, 120);
+
+      const rawCount = params.get('codici');
+      if (rawCount !== null) {
+        const count = Number.parseInt(rawCount, 10);
+        if (Number.isFinite(count) && count >= 1 && count <= MAX_COUNT) {
+          markerCount.value = String(count);
+        }
+      }
+
+      const rawView = (params.get('vista') || '').trim().toUpperCase();
+      const viewAliases = {
+        'TESTO': 'TEXT', 'TEXT': 'TEXT',
+        'EMOJI': 'EMOJI', 'ICONE': 'EMOJI',
+        'ENTRAMBI': 'BOTH', 'BOTH': 'BOTH', 'TESTO+EMOJI': 'BOTH'
+      };
+      if (viewAliases[rawView]) displayMode.value = viewAliases[rawView];
+
+      const customParamNames = ROTATIONS.flatMap(r => [
+        `d${r}`, `descr${r}`, `descrittore${r}`,
+        `e${r}`, `emoji${r}`, `icona${r}`
+      ]);
+      const hasCustomValues = customParamNames.some(name => params.has(name));
+
+      const rawTest = (params.get('test') || '').trim();
+      const normalizedTest = normalizeTestAlias(rawTest);
+      const aliases = {
+        'SI/NO': 'SI_NO',
+        'SI_NO': 'SI_NO',
+        'COMPRENSIONE': 'COMPRENSIONE',
+        'COLORI': 'COLORI',
+        'VALORI': 'VALORI',
+        'EMOZIONI': 'EMOZIONI',
+        'CUSTOM': 'CUSTOM',
+        'PERSONALIZZATA': 'CUSTOM',
+        'PERSONALIZZATO': 'CUSTOM'
+      };
+
+      const knownTest = aliases[normalizedTest];
+      const explicitCustom = knownTest === 'CUSTOM' || hasCustomValues;
+
+      if (explicitCustom) {
+        const customName = (params.get('nomeTest') || params.get('nometest') || '').trim();
+        const inferredName = rawTest && !knownTest ? rawTest : '';
+        customLegend = makeEmptyCustomLegend((customName || inferredName || 'Personalizzata').slice(0, 80));
+
+        for (const rotation of ROTATIONS) {
+          const descriptorRaw = firstParam(params, [`d${rotation}`, `descr${rotation}`, `descrittore${rotation}`]);
+          const emojiRaw = firstParam(params, [`e${rotation}`, `emoji${rotation}`, `icona${rotation}`]);
+          const descriptor = descriptorRaw === null ? '' : descriptorRaw.trim();
+          const emoji = emojiRaw === null ? '' : emojiRaw.trim();
+
+          customLegend.values[rotation] = {
+            text: descriptor || 'N.A.',
+            emoji: descriptor ? emoji : ''
+          };
+        }
+        testType.value = 'CUSTOM';
+      } else if (knownTest && TEST_LEGENDS[knownTest]) {
+        testType.value = knownTest;
+      }
+    }
+
+    function activeTestType() {
+      return hasScanContext ? scanTestType : (testType.value || 'SI_NO');
+    }
+
+    function activeLegend(type = activeTestType()) {
+      if (type === 'CUSTOM') {
+        return hasScanContext && scanCustomLegend ? scanCustomLegend : customLegend;
+      }
+      return TEST_LEGENDS[type] || TEST_LEGENDS.SI_NO;
+    }
+
+    function legendEntry(rotation, type = activeTestType()) {
+      return activeLegend(type).values?.[rotation] || { text: 'N.A.', emoji: '' };
+    }
+
+    function legendLabel(type = activeTestType()) {
+      return activeLegend(type).label || type;
+    }
+
+    function legendText(rotation, type = activeTestType()) {
+      if (rotation === null || rotation === undefined) return '';
+      return legendEntry(rotation, type).text || 'N.A.';
+    }
+
+    function legendDisplay(rotation, type = activeTestType(), mode = displayMode.value) {
+      if (rotation === null || rotation === undefined) return '';
+      const entry = legendEntry(rotation, type);
+      const text = entry.text || 'N.A.';
+      const emoji = entry.emoji || '';
+
+      if (text === 'N.A.') return 'N.A.';
+      if (mode === 'TEXT') return text;
+      if (mode === 'EMOJI') return emoji || text;
+      return emoji ? `${text} ${emoji}` : text;
+    }
+
+    function initDetector() {
+      if (!window.AR || !AR.DICTIONARIES || !AR.DICTIONARIES.ARUCO_4X4_1000) {
+        throw new Error('Libreria ArUco non caricata. Verificare la connessione Internet.');
+      }
+
+      AR.DICTIONARIES.ARUCO_4X4_50_LOCAL = {
+        nBits: 16,
+        tau: null,
+        codeList: AR.DICTIONARIES.ARUCO_4X4_1000.codeList.slice(0, 50)
+      };
+
+      detector = new AR.Detector({
+        dictionaryName: 'ARUCO_4X4_50_LOCAL',
+        maxHammingDistance: 2
+      });
+    }
+
+    function normalizedCount() {
+      const value = Number.parseInt(markerCount.value, 10);
+      if (!Number.isFinite(value)) return 20;
+      return Math.min(MAX_COUNT, Math.max(1, value));
+    }
+
+    function createState(count) {
+      expectedCount = count;
+      state = Array.from({ length: count }, (_, index) => ({
+        id: index + 1,
+        rotation: null,
+        lastSeenMs: null,
+        hammingDistance: null,
+        manual: false
+      }));
+      buildGrid();
+      updateUI();
+    }
+
+    function buildGrid() {
+      markerGrid.innerHTML = '';
+      for (const item of state) {
+        const el = document.createElement('div');
+        el.className = 'marker';
+        el.id = `marker-${item.id}`;
+        el.innerHTML = `
+          <span class="id">${item.id}</span>
+          <span class="state-icon pending" aria-label="Non rilevato" title="Non rilevato">◷</span>
+        `;
+        markerGrid.appendChild(el);
+      }
+    }
+
+    function setMessage(text = '', kind = '') {
+      message.textContent = text;
+      message.className = `message ${kind}`.trim();
+    }
+
+    function semanticSelectOptions(type = activeTestType()) {
+      const seen = new Set();
+      const options = [];
+
+      for (const rotation of ROTATIONS) {
+        const entry = legendEntry(rotation, type);
+        const key = `${entry.text}\u0000${entry.emoji}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        options.push({ rotation, entry });
+      }
+      return options;
+    }
+
+    function makeValueSelect(item) {
+      const select = document.createElement('select');
+      select.className = 'marker-value-select';
+      select.setAttribute('aria-label', `Valore ${item.id}`);
+
+      const options = semanticSelectOptions();
+      const currentEntry = legendEntry(item.rotation);
+      const currentKey = `${currentEntry.text}\u0000${currentEntry.emoji}`;
+
+      for (const { rotation, entry } of options) {
+        const option = document.createElement('option');
+        option.value = String(rotation);
+        option.textContent = legendDisplay(rotation);
+        const key = `${entry.text}\u0000${entry.emoji}`;
+        if (key === currentKey) option.selected = true;
+        select.appendChild(option);
+      }
+
+      select.addEventListener('change', () => {
+        item.rotation = Number(select.value);
+        item.manual = true;
+        updateUI();
+      });
+
+      return select;
+    }
+
+    function getChartGroups() {
+      const type = activeTestType();
+      const groups = [];
+      const indexByKey = new Map();
+
+      for (const rotation of ROTATIONS) {
+        const entry = legendEntry(rotation, type);
+        const key = `${entry.text}\u0000${entry.emoji}`;
+        if (!indexByKey.has(key)) {
+          indexByKey.set(key, groups.length);
+          groups.push({ key, rotation, count: 0 });
+        }
+      }
+
+      for (const item of state) {
+        if (item.rotation === null) continue;
+        const entry = legendEntry(item.rotation, type);
+        const key = `${entry.text}\u0000${entry.emoji}`;
+        const index = indexByKey.get(key);
+        if (index !== undefined) groups[index].count++;
+      }
+
+      return groups;
+    }
+
+    function renderHistogram(groups) {
+      const maxCount = Math.max(1, ...groups.map(group => group.count));
+
+      groups.forEach((group, index) => {
+        const row = document.createElement('div');
+        row.className = 'chart-row';
+
+        const label = document.createElement('div');
+        label.className = 'chart-label';
+        label.textContent = legendDisplay(group.rotation);
+
+        const track = document.createElement('div');
+        track.className = 'chart-track';
+        track.setAttribute('aria-label', `${label.textContent}: ${group.count}`);
+
+        const bar = document.createElement('div');
+        bar.className = 'chart-bar';
+        bar.style.width = `${(group.count / maxCount) * 100}%`;
+        bar.style.background = `linear-gradient(90deg, ${CHART_COLORS[index % CHART_COLORS.length]}, ${CHART_COLORS[(index + 1) % CHART_COLORS.length]})`;
+        track.appendChild(bar);
+
+        const value = document.createElement('div');
+        value.className = 'chart-count';
+        value.textContent = String(group.count);
+
+        row.append(label, track, value);
+        chart.appendChild(row);
+      });
+    }
+
+    function renderPieChart(groups) {
+      const total = groups.reduce((sum, group) => sum + group.count, 0);
+      const layout = document.createElement('div');
+      layout.className = 'pie-layout';
+
+      const pie = document.createElement('div');
+      pie.className = 'pie-chart';
+
+      if (total > 0) {
+        let start = 0;
+        const stops = [];
+        groups.forEach((group, index) => {
+          const end = start + (group.count / total) * 100;
+          if (end > start) stops.push(`${CHART_COLORS[index % CHART_COLORS.length]} ${start}% ${end}%`);
+          start = end;
+        });
+        pie.style.background = `conic-gradient(${stops.join(', ')})`;
+      }
+
+      const legend = document.createElement('div');
+      legend.className = 'pie-legend';
+
+      groups.forEach((group, index) => {
+        const row = document.createElement('div');
+        row.className = 'pie-legend-row';
+
+        const swatch = document.createElement('span');
+        swatch.className = 'pie-swatch';
+        swatch.style.background = CHART_COLORS[index % CHART_COLORS.length];
+
+        const label = document.createElement('span');
+        label.className = 'pie-label';
+        label.textContent = legendDisplay(group.rotation);
+
+        const value = document.createElement('span');
+        value.className = 'pie-value';
+        const percentage = total ? Math.round((group.count / total) * 100) : 0;
+        value.textContent = `${group.count} (${percentage}%)`;
+
+        row.append(swatch, label, value);
+        legend.appendChild(row);
+      });
+
+      layout.append(pie, legend);
+      chart.appendChild(layout);
+    }
+
+    function updateChart() {
+      if (!showChart) return;
+
+      const groups = getChartGroups();
+      chart.innerHTML = '';
+
+      if (!groups.some(group => group.count > 0)) {
+        const empty = document.createElement('div');
+        empty.className = 'chart-empty';
+        empty.textContent = 'Il grafico apparirà appena sarà acquisito il primo dato.';
+        chart.appendChild(empty);
+        return;
+      }
+
+      if (chartType.value === 'PIE') renderPieChart(groups);
+      else renderHistogram(groups);
+    }
+
+    function updateUI() {
+      document.body.dataset.displayMode = displayMode.value;
+      let count = 0;
+
+      for (const item of state) {
+        const el = document.getElementById(`marker-${item.id}`);
+        if (!el) continue;
+        const oldValue = el.querySelector('.state-icon, .marker-value-select');
+
+        if (item.rotation === null) {
+          el.classList.remove('seen');
+          const icon = document.createElement('span');
+          icon.textContent = '◷';
+          icon.className = 'state-icon pending';
+          icon.setAttribute('aria-label', 'Non rilevato');
+          icon.title = 'Non rilevato';
+          oldValue?.replaceWith(icon);
+        } else {
+          count++;
+          el.classList.add('seen');
+
+          if (showData) {
+            if (oldValue?.classList?.contains('marker-value-select')) {
+              if (document.activeElement !== oldValue) {
+                const entry = legendEntry(item.rotation);
+                const matching = [...oldValue.options].find(option => {
+                  const optionEntry = legendEntry(Number(option.value));
+                  return optionEntry.text === entry.text && optionEntry.emoji === entry.emoji;
+                });
+                if (matching) oldValue.value = matching.value;
+              }
+              for (const option of oldValue.options) {
+                option.textContent = legendDisplay(Number(option.value));
+              }
+            } else {
+              oldValue?.replaceWith(makeValueSelect(item));
+            }
+          } else {
+            const icon = document.createElement('span');
+            icon.textContent = '✓';
+            icon.className = 'state-icon';
+            icon.setAttribute('aria-label', 'Rilevato');
+            icon.title = 'Rilevato';
+            oldValue?.replaceWith(icon);
+          }
+        }
+      }
+
+      countText.textContent = `Rilevati: ${count}/${expectedCount}`;
+      progressBar.style.width = `${(count / expectedCount) * 100}%`;
+      csvBtn.disabled = count === 0;
+      updateChart();
+      return count;
+    }
+
+    function resetState() {
+      for (const item of state) {
+        item.rotation = null;
+        item.lastSeenMs = null;
+        item.hammingDistance = null;
+        item.manual = false;
+      }
+      updateUI();
+      scanTimeText.textContent = 'Ultima analisi: —';
+      statusText.textContent = 'Pronto';
+      setMessage('');
+    }
+
+    function quantizeRotation(marker) {
+      const p0 = marker.corners[0];
+      const p1 = marker.corners[1];
+      const dx = p1.x - p0.x;
+      const dy = p1.y - p0.y;
+      let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+      angle = (angle + 360) % 360;
+      return (Math.round(angle / 90) * 90) % 360;
+    }
+
+    function drawDetectedMarkers(markers) {
+      if (previewPanel.hidden) return;
+
+      ctx.save();
+      const scale = Math.max(1, canvas.width / 1920);
+      ctx.lineWidth = 4 * scale;
+      ctx.font = `700 ${30 * scale}px system-ui, sans-serif`;
+      ctx.textBaseline = 'bottom';
+
+      for (const marker of markers) {
+        if (marker.id < 1 || marker.id > expectedCount) continue;
+        const c = marker.corners;
+        ctx.strokeStyle = '#39d884';
+        ctx.beginPath();
+        ctx.moveTo(c[0].x, c[0].y);
+        for (let i = 1; i < c.length; i++) ctx.lineTo(c[i].x, c[i].y);
+        ctx.closePath();
+        ctx.stroke();
+
+        const label = `${marker.id}`;
+        const x = Math.max(4 * scale, c[0].x);
+        const y = Math.max(36 * scale, c[0].y - 6 * scale);
+        const metrics = ctx.measureText(label);
+        ctx.fillStyle = 'rgba(35,42,66,.82)';
+        ctx.fillRect(x - 5 * scale, y - 32 * scale, metrics.width + 10 * scale, 38 * scale);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(label, x, y);
+      }
+      ctx.restore();
+    }
+
+    async function refreshCameraList(preferredDeviceId = '') {
+      if (!navigator.mediaDevices?.enumerateDevices) return;
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter(d => d.kind === 'videoinput');
+      const oldValue = preferredDeviceId || cameraSelect.value;
+
+      cameraSelect.innerHTML = '<option value="">Predefinita</option>';
+      cameras.forEach((camera, index) => {
+        const option = document.createElement('option');
+        option.value = camera.deviceId;
+        option.textContent = camera.label || `Telecamera ${index + 1}`;
+        cameraSelect.appendChild(option);
+      });
+
+      if ([...cameraSelect.options].some(o => o.value === oldValue)) cameraSelect.value = oldValue;
+    }
+
+    function setControlsLocked(locked) {
+      startBtn.disabled = locked;
+      stopBtn.disabled = !locked;
+      cameraSelect.disabled = locked;
+      markerCount.disabled = locked;
+      requestTitle.disabled = locked;
+      testType.disabled = locked;
+      // displayMode resta volutamente modificabile durante l'acquisizione.
+    }
+
+    function cloneLegend(legend) {
+      return JSON.parse(JSON.stringify(legend));
+    }
+
+    function stopTracks() {
+      if (stream) for (const track of stream.getTracks()) track.stop();
+      stream = null;
+      video.srcObject = null;
+    }
+
+    function stopScanning(reason = 'Scansione interrotta', kind = '') {
+      scanning = false;
+      if (scanTimer) clearTimeout(scanTimer);
+      scanTimer = null;
+      stopTracks();
+      setControlsLocked(false);
+      statusText.textContent = reason;
+      setMessage(reason, kind);
+    }
+
+    async function waitForVideoDimensions() {
+      if (video.videoWidth && video.videoHeight) return;
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Nessun fotogramma ricevuto dalla telecamera.')), 8000);
+        video.addEventListener('loadedmetadata', () => {
+          clearTimeout(timeout);
+          resolve();
+        }, { once: true });
+      });
+    }
+
+    async function startScanning() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setMessage('Questo browser non espone l’API della telecamera. Aprire la pagina da HTTPS o localhost.', 'error');
+        return;
+      }
+
+      try {
+        if (!detector) initDetector();
+
+        const count = normalizedCount();
+        markerCount.value = String(count);
+        createState(count);
+        scanTitle = requestTitle.value.trim();
+        scanTestType = testType.value;
+        scanCustomLegend = scanTestType === 'CUSTOM' ? cloneLegend(customLegend) : null;
+        hasScanContext = true;
+
+        stopTracks();
+        resetState();
+        setControlsLocked(true);
+        statusText.textContent = 'Accesso alla telecamera…';
+        setMessage('');
+
+        const selectedDeviceId = cameraSelect.value;
+        const videoConstraints = {
+          width: { ideal: 3840 },
+          height: { ideal: 2160 },
+          frameRate: { ideal: 30, max: 30 }
+        };
+        if (selectedDeviceId) videoConstraints.deviceId = { exact: selectedDeviceId };
+
+        stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: videoConstraints });
+        video.srcObject = stream;
+        await video.play();
+        await waitForVideoDimensions();
+
+        const track = stream.getVideoTracks()[0];
+        const settings = track.getSettings ? track.getSettings() : {};
+        const width = settings.width || video.videoWidth;
+        const height = settings.height || video.videoHeight;
+        const actualDeviceId = settings.deviceId || selectedDeviceId;
+
+        canvas.width = video.videoWidth || width;
+        canvas.height = video.videoHeight || height;
+        emptyPreview.style.display = 'none';
+        resolutionText.textContent = `Risoluzione: ${width}×${height}`;
+        setMessage('Telecamera attiva. Scansione in corso.', 'ok');
+
+        await refreshCameraList(actualDeviceId);
+        cameraSelect.disabled = true;
+        startedAt = performance.now();
+        scanning = true;
+        statusText.textContent = 'Scansione in corso';
+        scanFrame();
+
+      } catch (err) {
+        console.error(err);
+        stopTracks();
+        scanning = false;
+        setControlsLocked(false);
+        statusText.textContent = 'Errore';
+        setMessage(humanCameraError(err), 'error');
+      }
+    }
+
+    function humanCameraError(err) {
+      if (!err) return 'Errore sconosciuto.';
+      switch (err.name) {
+        case 'NotAllowedError': return 'Accesso alla telecamera negato. Concedere il permesso al browser.';
+        case 'NotFoundError': return 'Nessuna telecamera disponibile.';
+        case 'OverconstrainedError': return `La telecamera non soddisfa i vincoli richiesti (${err.constraint || 'video'}).`;
+        case 'NotReadableError': return 'La telecamera è occupata o non può essere letta.';
+        case 'SecurityError': return 'Accesso alla telecamera bloccato dal contesto di sicurezza. Usare HTTPS o localhost.';
+        default: return err.message || String(err);
+      }
+    }
+
+    function scanFrame() {
+      if (!scanning || !stream || video.readyState < 2) return;
+      const t0 = performance.now();
+
+      try {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const markers = detector.detect(imageData);
+        const elapsedFromStart = performance.now() - startedAt;
+
+        for (const marker of markers) {
+          if (!Number.isInteger(marker.id) || marker.id < 1 || marker.id > expectedCount) continue;
+          const item = state[marker.id - 1];
+          if (!item.manual) item.rotation = quantizeRotation(marker);
+          item.lastSeenMs = elapsedFromStart;
+          item.hammingDistance = marker.hammingDistance;
+        }
+
+        drawDetectedMarkers(markers);
+        const count = updateUI();
+        const processingMs = performance.now() - t0;
+        scanTimeText.textContent = `Ultima analisi: ${Math.round(processingMs)} ms`;
+
+        if (count === expectedCount) {
+          stopScanning(`Completata: ${expectedCount}/${expectedCount}`, 'ok');
+          if (presentationMode) {
+            presentationStopBtn.disabled = true;
+            exportCsv({ withTimestamp: true });
+          }
+          return;
+        }
+
+        const wait = Math.max(100, SCAN_PAUSE_MS - processingMs);
+        scanTimer = setTimeout(scanFrame, wait);
+
+      } catch (err) {
+        console.error(err);
+        stopScanning('Errore durante l’analisi', 'error');
+        setMessage(err.message || String(err), 'error');
+      }
+    }
+
+    function csvEscape(value) {
+      const text = String(value ?? '');
+      if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+      return text;
+    }
+
+    function safeFilename(value) {
+      const cleaned = value
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9._-]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 80);
+      return cleaned || 'FEED_risultati';
+    }
+
+    function downloadText(filename, text, type) {
+      const blob = new Blob([text], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function localTimestamp(date = new Date()) {
+      const pad = n => String(n).padStart(2, '0');
+      return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+    }
+
+    function exportCsv({ withTimestamp = false } = {}) {
+      const title = scanTitle || requestTitle.value.trim();
+      const type = activeTestType();
+      const lines = [
+        `titolo,${csvEscape(title)}`,
+        `tipo_test,${csvEscape(legendLabel(type))}`,
+        '',
+        'numero,risultato'
+      ];
+
+      for (const item of state) {
+        const result = item.rotation === null ? '' : legendText(item.rotation, type);
+        lines.push(`${item.id},${csvEscape(result)}`);
+      }
+
+      const parts = [];
+      if (questionnaireCode) parts.push(questionnaireCode);
+      parts.push(title || legendLabel(type));
+      if (withTimestamp) parts.push(localTimestamp());
+      const base = parts.map(safeFilename).filter(Boolean).join('_') || 'FEED_risultati';
+      downloadText(`${base}.csv`, '\uFEFF' + lines.join('\r\n'), 'text/csv;charset=utf-8');
+    }
+
+    function toggleData() {
+      showData = !showData;
+      dataBtn.textContent = showData ? 'Nascondi dati' : 'Mostra dati';
+      updateUI();
+    }
+
+    function toggleChart() {
+      showChart = !showChart;
+      chartPanel.hidden = !showChart;
+      chartBtn.textContent = showChart ? 'Nascondi grafico' : 'Mostra grafico';
+      updateChart();
+    }
+
+    function togglePreview() {
+      previewPanel.hidden = !previewPanel.hidden;
+      previewBtn.textContent = previewPanel.hidden ? 'Mostra anteprima' : 'Nascondi anteprima';
+    }
+
+    function applyInitialViewState() {
+      dataBtn.textContent = showData ? 'Nascondi dati' : 'Mostra dati';
+      chartPanel.hidden = !showChart;
+      chartBtn.textContent = showChart ? 'Nascondi grafico' : 'Mostra grafico';
+      updateUI();
+    }
+
+    function activatePresentationMode() {
+      if (!presentationMode) return;
+      document.body.classList.add('presentation-mode');
+      presentationHeader.hidden = false;
+      presentationTitle.textContent = requestTitle.value.trim() || 'Questionario';
+      presentationStopBtn.disabled = false;
+    }
+
+    function stopPresentation(reason = 'Interrotta manualmente') {
+      if (scanning) stopScanning(reason);
+      presentationStopBtn.disabled = true;
+      exportCsv({ withTimestamp: true });
+    }
+
+    startBtn.addEventListener('click', startScanning);
+    stopBtn.addEventListener('click', () => stopScanning('Interrotta manualmente'));
+    presentationStopBtn.addEventListener('click', () => stopPresentation('Interrotta manualmente'));
+    resetBtn.addEventListener('click', () => {
+      if (scanning) stopScanning('Scansione azzerata');
+      createState(normalizedCount());
+      scanTitle = '';
+      scanTestType = testType.value;
+      scanCustomLegend = null;
+      hasScanContext = false;
+      resolutionText.textContent = 'Risoluzione: —';
+      scanTimeText.textContent = 'Ultima analisi: —';
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      emptyPreview.style.display = 'grid';
+      statusText.textContent = 'Pronto';
+      setMessage('');
+    });
+
+    dataBtn.addEventListener('click', toggleData);
+    chartBtn.addEventListener('click', toggleChart);
+    chartType.addEventListener('change', updateChart);
+    displayMode.addEventListener('change', () => updateUI());
+    csvBtn.addEventListener('click', exportCsv);
+    previewBtn.addEventListener('click', togglePreview);
+
+    markerCount.addEventListener('change', () => {
+      if (scanning) return;
+      markerCount.value = String(normalizedCount());
+      createState(normalizedCount());
+    });
+
+    testType.addEventListener('change', () => {
+      if (scanning || hasScanContext) return;
+      updateUI();
+    });
+
+    readUrlParameters();
+    createState(normalizedCount());
+    applyInitialViewState();
+    activatePresentationMode();
+    refreshCameraList().catch(() => { });
+    if (presentationMode) {
+      queueMicrotask(() => startScanning());
+    }
+    window.addEventListener('beforeunload', stopTracks);
+  </script>
+</body>
+
+</html>

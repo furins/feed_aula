@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="it">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Configuratore FEED Scan</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #25314d;
+      --muted: #6f7890;
+      --panel: rgba(255, 255, 255, .96);
+      --line: #dfe5f2;
+      --accent: #6d5dfc;
+      --accent-2: #8d7fff;
+      --accent-soft: #eeebff;
+      --ok: #24b36b;
+      --ok-soft: #e8f8ef;
+      --warn: #f2a91f;
+      --danger: #e34f62;
+      --sky: #4aa8ff;
+      --shadow: 0 14px 36px rgba(69, 73, 120, .12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 5%, rgba(255, 210, 92, .25), transparent 24rem),
+        radial-gradient(circle at 94% 12%, rgba(74, 168, 255, .20), transparent 25rem),
+        radial-gradient(circle at 78% 92%, rgba(141, 127, 255, .18), transparent 28rem),
+        linear-gradient(145deg, #f8fbff 0%, #f7f4ff 48%, #fff9f0 100%);
+    }
+
+    main {
+      width: min(1080px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 34px 0 52px;
+    }
+
+    header {
+      margin-bottom: 20px;
+      padding: 0 4px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.8rem, 4vw, 2.7rem);
+      line-height: 1.05;
+      letter-spacing: -.035em;
+    }
+
+    .subtitle {
+      margin: 9px 0 0;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid rgba(223, 229, 242, .95);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+      margin-bottom: 18px;
+      backdrop-filter: blur(10px);
+    }
+
+    .panel-title {
+      margin: 0 0 16px;
+      font-size: 1.15rem;
+      letter-spacing: -.015em;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .wide {
+      grid-column: 1 / -1;
+    }
+
+    label.field {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      font-size: .91rem;
+      font-weight: 750;
+      color: #4b5670;
+    }
+
+    input,
+    select,
+    textarea,
+    button {
+      font: inherit;
+    }
+
+    input[type="text"],
+    input[type="url"],
+    input[type="number"],
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 14px;
+      padding: 11px 13px;
+      outline: none;
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--accent-2);
+      box-shadow: 0 0 0 4px rgba(109, 93, 252, .10);
+    }
+
+    textarea {
+      min-height: 112px;
+      resize: vertical;
+      line-height: 1.42;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .88rem;
+    }
+
+    .switches {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .switch {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 50px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+      cursor: pointer;
+      user-select: none;
+      font-weight: 720;
+      color: #4b5670;
+    }
+
+    .switch input {
+      width: 20px;
+      height: 20px;
+      accent-color: var(--accent);
+    }
+
+    .legend-grid {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr) minmax(120px, .45fr);
+      gap: 10px 12px;
+      align-items: end;
+    }
+
+    .legend-head {
+      font-size: .78rem;
+      color: var(--muted);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      padding: 0 2px 2px;
+    }
+
+    .angle {
+      align-self: center;
+      font-weight: 850;
+      background: var(--accent-soft);
+      color: #5748dd;
+      border-radius: 12px;
+      padding: 10px 11px;
+      text-align: center;
+    }
+
+    .custom-panel[hidden] {
+      display: none;
+    }
+
+    .note {
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: .88rem;
+      line-height: 1.45;
+    }
+
+    .url-box {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .url-box textarea {
+      grid-row: span 2;
+    }
+
+    button,
+    .button-link {
+      border: 0;
+      border-radius: 14px;
+      padding: 11px 15px;
+      min-height: 44px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+      text-decoration: none;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      white-space: nowrap;
+    }
+
+    button:hover,
+    .button-link:hover {
+      transform: translateY(-1px);
+    }
+
+    button:active,
+    .button-link:active {
+      transform: translateY(0);
+    }
+
+    .primary {
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 8px 18px rgba(109, 93, 252, .22);
+    }
+
+    .secondary {
+      color: #5748dd;
+      background: var(--accent-soft);
+    }
+
+    .success {
+      color: #14854d;
+      background: var(--ok-soft);
+    }
+
+    .copy-status {
+      margin-top: 9px;
+      min-height: 1.25em;
+      color: var(--ok);
+      font-size: .88rem;
+      font-weight: 750;
+    }
+
+    .param-preview {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #f8f9fd;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .84rem;
+      line-height: 1.45;
+    }
+
+    .param-preview code {
+      color: #4e45b8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 760px) {
+
+      .grid,
+      .switches {
+        grid-template-columns: 1fr;
+      }
+
+      .wide {
+        grid-column: auto;
+      }
+
+      .legend-grid {
+        grid-template-columns: 76px minmax(0, 1fr);
+      }
+
+      .legend-head.emoji-head {
+        display: none;
+      }
+
+      .legend-grid .emoji-field {
+        grid-column: 2;
+      }
+
+      .url-box {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .url-box textarea {
+        grid-column: 1 / -1;
+        grid-row: auto;
+      }
+    }
+
+    @media (max-width: 480px) {
+      main {
+        width: min(100% - 20px, 1080px);
+        padding-top: 20px;
+      }
+
+      .panel {
+        border-radius: 19px;
+        padding: 16px;
+      }
+
+      .url-box {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <header>
+      <h1>Configuratore FEED Scan</h1>
+      <p class="subtitle">Prepara un collegamento pronto da usare per il questionario.</p>
+    </header>
+
+    <form id="configForm" autocomplete="off">
+      <section class="panel">
+        <h2 class="panel-title">Pagina e questionario</h2>
+        <div class="grid">
+          <label class="field wide">
+            Indirizzo della pagina FEED Scan
+            <input id="baseUrl" type="url" inputmode="url" spellcheck="false" />
+          </label>
+
+          <label class="field">
+            Codice questionario
+            <input id="questionnaireCode" type="text" maxlength="60" placeholder="Es. Q12" />
+          </label>
+
+          <label class="field">
+            Numero di codici
+            <input id="markerCount" type="number" min="1" max="30" step="1" value="20" />
+          </label>
+
+          <label class="field wide">
+            Titolo della richiesta
+            <input id="requestTitle" type="text" maxlength="120" placeholder="Es. Comprensione del testo" />
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel-title">Tipo di test</h2>
+        <div class="grid">
+          <label class="field">
+            Legenda
+            <select id="testType">
+              <option value="SI_NO">SI/NO</option>
+              <option value="COMPRENSIONE">Comprensione</option>
+              <option value="COLORI">Colori</option>
+              <option value="VALORI">Valori</option>
+              <option value="EMOZIONI">Emozioni</option>
+              <option value="CUSTOM">Personalizzata</option>
+            </select>
+          </label>
+
+          <label class="field">
+            Visualizzazione dei valori
+            <select id="displayMode">
+              <option value="entrambi">Testo + emoji</option>
+              <option value="testo">Solo testo</option>
+              <option value="emoji">Solo emoji</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel custom-panel" id="customPanel" hidden>
+        <h2 class="panel-title">Legenda personalizzata</h2>
+        <div class="grid" style="margin-bottom:16px">
+          <label class="field wide">
+            Nome del test personalizzato
+            <input id="customName" type="text" maxlength="80" placeholder="Es. Gradimento" />
+          </label>
+        </div>
+
+        <div class="legend-grid">
+          <div class="legend-head">Rotazione</div>
+          <div class="legend-head">Descrittore</div>
+          <div class="legend-head emoji-head">Emoji / icona</div>
+
+          <div class="angle">0°</div>
+          <label class="field"><input id="d0" type="text" placeholder="Es. No" /></label>
+          <label class="field emoji-field"><input id="e0" type="text" placeholder="Es. ❌" /></label>
+
+          <div class="angle">90°</div>
+          <label class="field"><input id="d90" type="text" placeholder="Vuoto = N.A." /></label>
+          <label class="field emoji-field"><input id="e90" type="text" placeholder="Facoltativa" /></label>
+
+          <div class="angle">180°</div>
+          <label class="field"><input id="d180" type="text" placeholder="Es. Sì" /></label>
+          <label class="field emoji-field"><input id="e180" type="text" placeholder="Es. ✅" /></label>
+
+          <div class="angle">270°</div>
+          <label class="field"><input id="d270" type="text" placeholder="Vuoto = N.A." /></label>
+          <label class="field emoji-field"><input id="e270" type="text" placeholder="Facoltativa" /></label>
+        </div>
+        <p class="note">Un descrittore lasciato vuoto viene interpretato dalla webapp come <strong>N.A.</strong>.
+          L'emoji è facoltativa.</p>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel-title">Visualizzazione iniziale</h2>
+        <div class="switches">
+          <label class="switch">
+            <input id="showData" type="checkbox" />
+            <span>Mostra dati da subito</span>
+          </label>
+          <label class="switch">
+            <input id="showChart" type="checkbox" />
+            <span>Mostra grafico da subito</span>
+          </label>
+          <label class="switch">
+            <input id="presentation" type="checkbox" checked />
+            <span>Modalità presentazione</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel-title">URL generato</h2>
+        <div class="url-box">
+          <textarea id="generatedUrl" readonly spellcheck="false" aria-label="URL generato"></textarea>
+          <button id="copyBtn" class="primary" type="button">Copia URL</button>
+          <a id="openBtn" class="button-link success" href="#" target="_blank" rel="noopener">Apri</a>
+        </div>
+        <div class="copy-status" id="copyStatus" aria-live="polite"></div>
+        <div class="param-preview">L'indirizzo viene aggiornato automaticamente a ogni modifica. I caratteri speciali,
+          gli spazi e le emoji vengono codificati correttamente nell'URL.</div>
+      </section>
+    </form>
+  </main>
+
+  <script>
+    'use strict';
+
+    const form = document.getElementById('configForm');
+    const baseUrl = document.getElementById('baseUrl');
+    const questionnaireCode = document.getElementById('questionnaireCode');
+    const requestTitle = document.getElementById('requestTitle');
+    const markerCount = document.getElementById('markerCount');
+    const testType = document.getElementById('testType');
+    const displayMode = document.getElementById('displayMode');
+    const showData = document.getElementById('showData');
+    const showChart = document.getElementById('showChart');
+    const presentation = document.getElementById('presentation');
+    const customPanel = document.getElementById('customPanel');
+    const customName = document.getElementById('customName');
+    const generatedUrl = document.getElementById('generatedUrl');
+    const copyBtn = document.getElementById('copyBtn');
+    const openBtn = document.getElementById('openBtn');
+    const copyStatus = document.getElementById('copyStatus');
+
+    const customFields = {
+      d0: document.getElementById('d0'),
+      e0: document.getElementById('e0'),
+      d90: document.getElementById('d90'),
+      e90: document.getElementById('e90'),
+      d180: document.getElementById('d180'),
+      e180: document.getElementById('e180'),
+      d270: document.getElementById('d270'),
+      e270: document.getElementById('e270')
+    };
+
+    function defaultPrototypeUrl() {
+      try {
+        return new URL('scan.html', window.location.href).href.split('?')[0].split('#')[0];
+      } catch (_) {
+        return 'scan.html';
+      }
+    }
+
+    function normalizeBaseUrl(raw) {
+      const value = raw.trim();
+      if (!value) return 'scan.html';
+      try {
+        const url = new URL(value, window.location.href);
+        url.search = '';
+        url.hash = '';
+        return url.href;
+      } catch (_) {
+        return value.split('?')[0].split('#')[0];
+      }
+    }
+
+    function safeCount() {
+      const parsed = Number.parseInt(markerCount.value, 10);
+      if (!Number.isFinite(parsed)) return 20;
+      return Math.max(1, Math.min(30, parsed));
+    }
+
+    function updateCustomVisibility() {
+      customPanel.hidden = testType.value !== 'CUSTOM';
+    }
+
+    function buildUrl() {
+      const base = normalizeBaseUrl(baseUrl.value);
+      let url;
+
+      try {
+        url = new URL(base, window.location.href);
+      } catch (_) {
+        generatedUrl.value = base;
+        openBtn.href = base || '#';
+        return;
+      }
+
+      const params = new URLSearchParams();
+      const code = questionnaireCode.value.trim();
+      const title = requestTitle.value.trim();
+
+      if (code) params.set('codice', code);
+      if (title) params.set('titolo', title);
+      params.set('codici', String(safeCount()));
+      params.set('vista', displayMode.value);
+
+      if (testType.value === 'CUSTOM') {
+        params.set('test', 'Personalizzata');
+        const name = customName.value.trim();
+        if (name) params.set('nomeTest', name);
+
+        for (const [key, field] of Object.entries(customFields)) {
+          const value = field.value.trim();
+          if (value) params.set(key, value);
+        }
+      } else {
+        const testNames = {
+          SI_NO: 'SI_NO',
+          COMPRENSIONE: 'Comprensione',
+          COLORI: 'Colori',
+          VALORI: 'Valori',
+          EMOZIONI: 'Emozioni'
+        };
+        params.set('test', testNames[testType.value] || 'SI_NO');
+      }
+
+      if (showData.checked) params.set('dati', 'true');
+      if (showChart.checked) params.set('grafico', 'true');
+      if (presentation.checked) params.set('presentazione', 'true');
+
+      url.search = params.toString();
+      url.hash = '';
+
+      generatedUrl.value = url.href;
+      openBtn.href = url.href;
+      copyStatus.textContent = '';
+    }
+
+    async function copyUrl() {
+      const text = generatedUrl.value;
+      if (!text) return;
+
+      try {
+        await navigator.clipboard.writeText(text);
+        copyStatus.textContent = 'URL copiato negli appunti.';
+      } catch (_) {
+        generatedUrl.focus();
+        generatedUrl.select();
+        try {
+          document.execCommand('copy');
+          copyStatus.textContent = 'URL copiato negli appunti.';
+        } catch (_) {
+          copyStatus.textContent = 'Seleziona il testo e copialo manualmente.';
+        }
+      }
+    }
+
+    baseUrl.value = defaultPrototypeUrl();
+    updateCustomVisibility();
+    buildUrl();
+
+    form.addEventListener('input', () => {
+      updateCustomVisibility();
+      buildUrl();
+    });
+
+    form.addEventListener('change', () => {
+      updateCustomVisibility();
+      buildUrl();
+    });
+
+    markerCount.addEventListener('blur', () => {
+      markerCount.value = String(safeCount());
+      buildUrl();
+    });
+
+    copyBtn.addEventListener('click', copyUrl);
+
+    generatedUrl.addEventListener('click', () => generatedUrl.select());
+  </script>
+</body>
+
+</html>
