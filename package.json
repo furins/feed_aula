@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "web:build": "node scripts/build-web.mjs",
-    "desktop:dev": "tauri dev",
+    "desktop:dev": "tauri dev --no-watch",
+    "desktop:dev:watch": "tauri dev",
     "desktop:build": "tauri build"
   },
   "dependencies": {

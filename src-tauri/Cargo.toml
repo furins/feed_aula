@@ -3,9 +3,13 @@ name = "feed_aula"
 version = "0.1.0"
 description = "FEED - feedback formativo in aula"
 edition = "2021"
+rust-version = "1.88"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+rusqlite = { version = "0.40.1", features = [
+    "bundled-sqlcipher-vendored-openssl",
+] }

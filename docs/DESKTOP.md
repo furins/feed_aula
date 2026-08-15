@@ -58,3 +58,27 @@ La telecamera viene usata dallo scanner esistente e i fotogrammi restano elabora
 Su macOS `Info.plist` contiene la motivazione del permesso camera coerente con `docs/PRIVACY.md`.
 
 La fase successiva introdurrà lo storage locale cifrato e il modello dati pseudonimizzato.
+
+## Archivio locale cifrato
+
+Il branch desktop usa due database SQLCipher separati:
+
+- `feed.db`: questionari, sessioni e risposte pseudonimizzate;
+- `identities.db`: classi, numeri d'appello, UUID e nominativi.
+
+I file vengono creati nella directory dati privata dell'applicazione, non nella
+cartella del progetto. La password non viene salvata: viene passata a SQLCipher
+solo durante l'apertura dei database e rimane in memoria per il tempo necessario
+alla chiamata.
+
+Il core Rust espone per ora soltanto i comandi di infrastruttura:
+
+- `store_exists`
+- `create_store`
+- `unlock_store`
+- `lock_store`
+- `store_unlocked`
+
+La UI di gestione di classi, studenti e storico verrà aggiunta in una fase
+successiva. Il frontend non ha accesso diretto a SQL e non riceve la chiave del
+database.
