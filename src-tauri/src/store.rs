@@ -1170,7 +1170,22 @@ pub fn update_student(
                     roster_number,
                 )?;
             }
+            (true, false) => {
+                // Il record viene reso subito inattivo per liberare il suo numero
+                // nell'indice parziale; poi tutti gli alunni attivi successivi
+                // vengono spostati indietro di una posizione.
+                transaction
+                    .execute(
+                        "UPDATE students SET active = 0 WHERE student_uuid = ?1",
+                        [student_uuid.as_str()],
+                    )
+                    .map_err(|error| format!("Impossibile preparare la disattivazione: {error}"))?;
+
+                close_roster_gap(&transaction, &current.class_uuid, current.roster_number)?;
+            }
             (false, true) => {
+                // Riattivando un alunno FEED apre uno spazio nella posizione scelta,
+                // senza modificare alcun marker.
                 make_roster_space(&transaction, &current.class_uuid, roster_number)?;
             }
             _ => {}
@@ -1287,8 +1302,9 @@ pub fn store_exists(app: AppHandle) -> Result<bool, String> {
     }
 }
 
-#[tauri::command]
-/// Comando Tauri che crea l'archivio, azzera la password ricevuta e mantiene aperte le connessioni.
+#[tauri::command(async)]
+/// Comando Tauri asincrono che crea l'archivio senza bloccare il ridisegno della UI,
+/// azzera la password ricevuta e mantiene aperte le connessioni.
 pub fn create_store(
     app: AppHandle,
     mut password: String,
@@ -1306,8 +1322,9 @@ pub fn create_store(
     Ok(())
 }
 
-#[tauri::command]
-/// Comando Tauri che sblocca l'archivio, azzera la password ricevuta e conserva le connessioni in RAM.
+#[tauri::command(async)]
+/// Comando Tauri asincrono che sblocca l'archivio senza bloccare il ridisegno della UI,
+/// azzera la password ricevuta e conserva le connessioni in RAM.
 pub fn unlock_store(
     app: AppHandle,
     mut password: String,
