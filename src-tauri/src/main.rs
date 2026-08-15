@@ -2,6 +2,8 @@
 
 mod store;
 
+/// Avvia FEED, registra lo stato dell'archivio cifrato e rende disponibili
+/// al frontend esclusivamente i comandi Tauri previsti per la gestione dello storage.
 fn main() {
     tauri::Builder::default()
         .manage(store::StoreState::default())

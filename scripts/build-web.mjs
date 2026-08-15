@@ -9,6 +9,7 @@ const distDir = join(rootDir, 'dist');
 const desktopSource = join(rootDir, 'desktop.html');
 const scanSource = join(rootDir, 'scan.html');
 const configSource = join(rootDir, 'config.html');
+const appIconSource = join(rootDir, 'app-icon.png');
 
 const vendorSource = join(rootDir, 'node_modules', 'js-aruco2', 'src');
 const vendorTarget = join(distDir, 'vendor', 'js-aruco2');
@@ -50,6 +51,7 @@ async function build() {
     writeFile(join(distDir, 'index.html'), desktopHtml, 'utf8'),
     writeFile(join(distDir, 'scan.html'), offlineScan, 'utf8'),
     writeFile(join(distDir, 'config.html'), configHtml, 'utf8'),
+    cp(appIconSource, join(distDir, 'app-icon.png')),
     cp(join(vendorSource, 'cv.js'), join(vendorTarget, 'cv.js')),
     cp(join(vendorSource, 'aruco.js'), join(vendorTarget, 'aruco.js')),
     cp(

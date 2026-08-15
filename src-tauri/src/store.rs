@@ -38,6 +38,7 @@ pub struct StoreState {
 }
 
 impl Default for StoreState {
+    /// Crea lo stato iniziale dello storage senza alcun archivio aperto.
     fn default() -> Self {
         Self {
             inner: Mutex::new(None),
@@ -73,6 +74,7 @@ struct WrappedKey {
     ciphertext: String,
 }
 
+/// Restituisce la directory privata in cui FEED conserva i file cifrati.
 fn storage_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
@@ -80,6 +82,7 @@ fn storage_dir(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|error| format!("Impossibile determinare la cartella dati: {error}"))
 }
 
+/// Costruisce i percorsi dei due database SQLCipher e dell'envelope delle chiavi.
 fn store_paths(app: &AppHandle) -> Result<(PathBuf, PathBuf, PathBuf), String> {
     let dir = storage_dir(app)?;
     Ok((
@@ -89,6 +92,7 @@ fn store_paths(app: &AppHandle) -> Result<(PathBuf, PathBuf, PathBuf), String> {
     ))
 }
 
+/// Verifica che la password rispetti il requisito minimo definito da FEED.
 fn validate_password(password: &str) -> Result<(), String> {
     if password.chars().count() < MIN_PASSWORD_LEN {
         return Err(format!(
@@ -98,6 +102,7 @@ fn validate_password(password: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Genera byte casuali crittograficamente sicuri e li mantiene in memoria azzerabile.
 fn random_bytes<const N: usize>() -> Result<Zeroizing<[u8; N]>, String> {
     let mut bytes = Zeroizing::new([0u8; N]);
     getrandom::fill(&mut *bytes)
@@ -105,6 +110,7 @@ fn random_bytes<const N: usize>() -> Result<Zeroizing<[u8; N]>, String> {
     Ok(bytes)
 }
 
+/// Deriva dalla password la Key Encryption Key usando Argon2id e i parametri dell'envelope.
 fn derive_kek(password: &str, config: &KdfConfig) -> Result<Zeroizing<[u8; KEY_LEN]>, String> {
     if config.algorithm != "argon2id" {
         return Err("Formato chiavi FEED non supportato.".to_string());
@@ -135,6 +141,7 @@ fn derive_kek(password: &str, config: &KdfConfig) -> Result<Zeroizing<[u8; KEY_L
     Ok(kek)
 }
 
+/// Crea una nuova configurazione Argon2id con salt casuale per un nuovo archivio.
 fn new_kdf_config() -> Result<KdfConfig, String> {
     let salt = random_bytes::<SALT_LEN>()?;
     Ok(KdfConfig {
@@ -146,11 +153,8 @@ fn new_kdf_config() -> Result<KdfConfig, String> {
     })
 }
 
-fn wrap_key(
-    kek: &[u8; KEY_LEN],
-    key: &[u8; KEY_LEN],
-    aad: &[u8],
-) -> Result<WrappedKey, String> {
+/// Cifra una chiave SQLCipher con AES-256-GCM usando la KEK e l'AAD specifico.
+fn wrap_key(kek: &[u8; KEY_LEN], key: &[u8; KEY_LEN], aad: &[u8]) -> Result<WrappedKey, String> {
     let cipher = Aes256Gcm::new_from_slice(kek)
         .map_err(|_| "Impossibile inizializzare la protezione delle chiavi.".to_string())?;
     let nonce_bytes = random_bytes::<NONCE_LEN>()?;
@@ -158,13 +162,7 @@ fn wrap_key(
     #[allow(deprecated)]
     let nonce = Nonce::<Aes256Gcm>::from_slice(&*nonce_bytes);
     let ciphertext = cipher
-        .encrypt(
-            nonce,
-            Payload {
-                msg: &key[..],
-                aad,
-            },
-        )
+        .encrypt(nonce, Payload { msg: &key[..], aad })
         .map_err(|_| "Impossibile proteggere le chiavi dell'archivio.".to_string())?;
 
     Ok(WrappedKey {
@@ -173,6 +171,7 @@ fn wrap_key(
     })
 }
 
+/// Decifra e valida una chiave SQLCipher protetta nell'envelope.
 fn unwrap_key(
     kek: &[u8; KEY_LEN],
     wrapped: &WrappedKey,
@@ -214,6 +213,7 @@ fn unwrap_key(
     Ok(key)
 }
 
+/// Crea l'envelope che protegge separatamente le chiavi dei due database.
 fn create_key_envelope(
     password: &str,
     data_key: &[u8; KEY_LEN],
@@ -230,6 +230,7 @@ fn create_key_envelope(
     })
 }
 
+/// Legge e valida dal disco l'envelope contenente le chiavi protette.
 fn read_key_envelope(path: &Path) -> Result<KeyEnvelope, String> {
     let bytes = fs::read(path)
         .map_err(|error| format!("Impossibile leggere le chiavi dell'archivio: {error}"))?;
@@ -246,6 +247,7 @@ fn read_key_envelope(path: &Path) -> Result<KeyEnvelope, String> {
     Ok(envelope)
 }
 
+/// Scrive l'envelope in modo atomico e applica permessi restrittivi quando disponibili.
 fn write_key_envelope(path: &Path, envelope: &KeyEnvelope) -> Result<(), String> {
     let parent = path
         .parent()
@@ -263,6 +265,7 @@ fn write_key_envelope(path: &Path, envelope: &KeyEnvelope) -> Result<(), String>
 }
 
 #[cfg(unix)]
+/// Su sistemi Unix limita il file al solo utente proprietario (modalità 0600).
 fn restrict_file_permissions(path: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
 
@@ -275,10 +278,12 @@ fn restrict_file_permissions(path: &Path) -> Result<(), String> {
 }
 
 #[cfg(not(unix))]
+/// Su sistemi non Unix non modifica i permessi: la protezione è demandata al sistema operativo.
 fn restrict_file_permissions(_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Converte una chiave binaria SQLCipher nel PRAGMA raw-key senza conservarne una copia persistente.
 fn raw_key_pragma(key: &[u8; KEY_LEN]) -> Zeroizing<String> {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
     let mut hex = Zeroizing::new(String::with_capacity(KEY_LEN * 2));
@@ -289,6 +294,7 @@ fn raw_key_pragma(key: &[u8; KEY_LEN]) -> Zeroizing<String> {
     Zeroizing::new(format!("PRAGMA key = \"x'{}'\";", hex.as_str()))
 }
 
+/// Apre un database SQLCipher, applica la chiave e configura le opzioni di sicurezza.
 fn open_cipher_database(path: &Path, key: &[u8; KEY_LEN]) -> Result<Connection, String> {
     let connection = Connection::open(path)
         .map_err(|error| format!("Impossibile aprire il database cifrato: {error}"))?;
@@ -309,12 +315,15 @@ fn open_cipher_database(path: &Path, key: &[u8; KEY_LEN]) -> Result<Connection, 
         .map_err(|error| format!("Impossibile configurare SQLCipher: {error}"))?;
 
     connection
-        .query_row("SELECT count(*) FROM sqlite_master", [], |row| row.get::<_, i64>(0))
+        .query_row("SELECT count(*) FROM sqlite_master", [], |row| {
+            row.get::<_, i64>(0)
+        })
         .map_err(|_| "Database FEED non leggibile o chiave non valida.".to_string())?;
 
     Ok(connection)
 }
 
+/// Inizializza lo schema del database pseudonimizzato con questionari, sessioni e risposte.
 fn create_data_schema(connection: &Connection) -> Result<(), String> {
     connection
         .execute_batch(
@@ -369,6 +378,7 @@ fn create_data_schema(connection: &Connection) -> Result<(), String> {
         .map_err(|error| format!("Impossibile inizializzare il database dati: {error}"))
 }
 
+/// Inizializza lo schema separato che contiene classi e corrispondenze nominative.
 fn create_identity_schema(connection: &Connection) -> Result<(), String> {
     connection
         .execute_batch(
@@ -405,6 +415,7 @@ fn create_identity_schema(connection: &Connection) -> Result<(), String> {
         .map_err(|error| format!("Impossibile inizializzare il database identità: {error}"))
 }
 
+/// Rimuove i file parziali se la creazione di un nuovo archivio non va a buon fine.
 fn cleanup_store_files(data_path: &Path, identities_path: &Path, keys_path: &Path) {
     let _ = fs::remove_file(data_path);
     let _ = fs::remove_file(identities_path);
@@ -414,6 +425,7 @@ fn cleanup_store_files(data_path: &Path, identities_path: &Path, keys_path: &Pat
     }
 }
 
+/// Crea un nuovo archivio FEED con due chiavi casuali indipendenti e relativo envelope.
 fn create_new_store(app: &AppHandle, password: &str) -> Result<EncryptedStore, String> {
     validate_password(password)?;
 
@@ -453,12 +465,15 @@ fn create_new_store(app: &AppHandle, password: &str) -> Result<EncryptedStore, S
     result
 }
 
+/// Sblocca un archivio esistente derivando la KEK e riaprendo entrambi i database cifrati.
 fn open_existing_store(app: &AppHandle, password: &str) -> Result<EncryptedStore, String> {
     validate_password(password)?;
 
     let (data_path, identities_path, keys_path) = store_paths(app)?;
     if !data_path.exists() || !identities_path.exists() || !keys_path.exists() {
-        return Err("Archivio FEED non inizializzato o incompleto su questo dispositivo.".to_string());
+        return Err(
+            "Archivio FEED non inizializzato o incompleto su questo dispositivo.".to_string(),
+        );
     }
 
     let envelope = read_key_envelope(&keys_path)?;
@@ -476,9 +491,14 @@ fn open_existing_store(app: &AppHandle, password: &str) -> Result<EncryptedStore
 }
 
 #[tauri::command]
+/// Indica al frontend se l'archivio FEED esiste ed è composto da tutti i file previsti.
 pub fn store_exists(app: AppHandle) -> Result<bool, String> {
     let (data_path, identities_path, keys_path) = store_paths(&app)?;
-    let present = [data_path.exists(), identities_path.exists(), keys_path.exists()];
+    let present = [
+        data_path.exists(),
+        identities_path.exists(),
+        keys_path.exists(),
+    ];
     let count = present.into_iter().filter(|exists| *exists).count();
 
     match count {
@@ -492,6 +512,7 @@ pub fn store_exists(app: AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
+/// Comando Tauri che crea l'archivio, azzera la password ricevuta e mantiene aperte le connessioni.
 pub fn create_store(
     app: AppHandle,
     mut password: String,
@@ -510,6 +531,7 @@ pub fn create_store(
 }
 
 #[tauri::command]
+/// Comando Tauri che sblocca l'archivio, azzera la password ricevuta e conserva le connessioni in RAM.
 pub fn unlock_store(
     app: AppHandle,
     mut password: String,
@@ -528,6 +550,7 @@ pub fn unlock_store(
 }
 
 #[tauri::command]
+/// Comando Tauri che chiude le connessioni eliminandole dallo stato condiviso.
 pub fn lock_store(state: State<'_, StoreState>) -> Result<(), String> {
     let mut guard = state
         .inner
@@ -538,6 +561,7 @@ pub fn lock_store(state: State<'_, StoreState>) -> Result<(), String> {
 }
 
 #[tauri::command]
+/// Comunica al frontend se le connessioni cifrate sono attualmente aperte.
 pub fn store_unlocked(state: State<'_, StoreState>) -> Result<bool, String> {
     let guard = state
         .inner
