@@ -6,6 +6,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(scriptDir, '..');
 const distDir = join(rootDir, 'dist');
 
+const desktopSource = join(rootDir, 'desktop.html');
 const scanSource = join(rootDir, 'scan.html');
 const configSource = join(rootDir, 'config.html');
 
@@ -31,7 +32,8 @@ async function build() {
   await rm(distDir, { recursive: true, force: true });
   await mkdir(vendorTarget, { recursive: true });
 
-  const [scanHtml, configHtml] = await Promise.all([
+  const [desktopHtml, scanHtml, configHtml] = await Promise.all([
+    readFile(desktopSource, 'utf8'),
     readFile(scanSource, 'utf8'),
     readFile(configSource, 'utf8')
   ]);
@@ -45,10 +47,9 @@ async function build() {
   }
 
   await Promise.all([
+    writeFile(join(distDir, 'index.html'), desktopHtml, 'utf8'),
     writeFile(join(distDir, 'scan.html'), offlineScan, 'utf8'),
     writeFile(join(distDir, 'config.html'), configHtml, 'utf8'),
-    // Tauri cerca index.html come entry point predefinito.
-    writeFile(join(distDir, 'index.html'), configHtml, 'utf8'),
     cp(join(vendorSource, 'cv.js'), join(vendorTarget, 'cv.js')),
     cp(join(vendorSource, 'aruco.js'), join(vendorTarget, 'aruco.js')),
     cp(
@@ -61,7 +62,7 @@ async function build() {
   const markersTarget = join(distDir, 'markers');
   await cp(markersSource, markersTarget, { recursive: true });
 
-  console.log('FEED desktop frontend pronto in dist/ (dipendenze ArUco locali).');
+  console.log('FEED desktop frontend pronto in dist/ (riconoscimento marker offline).');
 }
 
 build().catch((error) => {
