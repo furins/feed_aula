@@ -845,6 +845,7 @@
     let showData = false;
     let showChart = false;
     let presentationMode = false;
+    let dedicatedWindow = false;
     let questionnaireCode = '';
     let classUuid = '';
     let classMode = false;
@@ -952,6 +953,7 @@
       showData = booleanParam(params, ['dati', 'mostraDati', 'mostradati'], false);
       showChart = booleanParam(params, ['grafico', 'mostraGrafico', 'mostragrafico'], false);
       presentationMode = booleanParam(params, ['presentazione', 'presentation'], false);
+      dedicatedWindow = booleanParam(params, ['finestraSeparata'], false);
 
       const title = (params.get('titolo') || '').trim();
       if (title) requestTitle.value = title.slice(0, 120);
@@ -1604,6 +1606,19 @@
       }
 
       await completePersistentSession();
+
+      if (dedicatedWindow && window.__TAURI__) {
+        try {
+          await invoke('close_scan_window');
+          return;
+        } catch (error) {
+          setMessage(
+            typeof error === 'string' ? error : (error?.message || String(error)),
+            'error'
+          );
+          return;
+        }
+      }
 
       if (window.history.length > 1) window.history.back();
       else window.location.assign('index.html');

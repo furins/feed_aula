@@ -1233,22 +1233,11 @@ pub fn delete_student(student_uuid: String, state: State<'_, StoreState>) -> Res
         .as_mut()
         .ok_or_else(|| "FEED è bloccato. Sblocca l'archivio per continuare.".to_string())?;
 
-    let has_history = store
-        .data
-        .query_row(
-            "SELECT EXISTS(
-               SELECT 1 FROM responses WHERE student_uuid = ?1 LIMIT 1
-             )",
-            [student_uuid.as_str()],
-            |row| row.get::<_, i64>(0),
-        )
-        .map_err(|error| format!("Impossibile verificare lo storico dell'alunno: {error}"))?
-        == 1;
-
-    if has_history {
+    if student_has_history(&store.data, &student_uuid)? {
         return Err(
-            "Questo alunno possiede già risposte nello storico e non può essere eliminato. \
-             Usa “Disattiva” per conservarne correttamente i dati."
+            "Questo alunno è ancora presente nello storico e non può essere eliminato. \
+             Se devi rimuoverne tutti i dati, usa Storico → cerca l’alunno → \
+             “Elimina tutti i dati storici”, quindi torna qui."
                 .to_string(),
         );
     }
@@ -1593,6 +1582,7 @@ pub struct HistorySessionSummary {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryResponseRecord {
+    student_uuid: String,
     roster_number: i64,
     display_name: Option<String>,
     rotation: Option<i64>,
@@ -1676,6 +1666,7 @@ fn history_summary_from_row(
 #[tauri::command]
 pub fn list_history_sessions(
     class_uuid: Option<String>,
+    student_uuids: Option<Vec<String>>,
     state: State<'_, StoreState>,
 ) -> Result<Vec<HistorySessionSummary>, String> {
     let guard = state
@@ -1727,6 +1718,26 @@ pub fn list_history_sessions(
         .next()
         .map_err(|error| format!("Impossibile leggere lo storico: {error}"))?
     {
+        if let Some(student_uuids) = student_uuids.as_ref() {
+            if student_uuids.is_empty() {
+                continue;
+            }
+
+            let snapshot_json: String = row.get(2).map_err(|error| {
+                format!("Impossibile leggere lo snapshot della sessione: {error}")
+            })?;
+            let snapshot: SessionQuestionnaireSnapshot = serde_json::from_str(&snapshot_json)
+                .map_err(|error| format!("Snapshot della sessione non valido: {error}"))?;
+
+            if !snapshot.participants.iter().any(|participant| {
+                student_uuids
+                    .iter()
+                    .any(|student_uuid| participant.student_uuid == *student_uuid)
+            }) {
+                continue;
+            }
+        }
+
         sessions.push(history_summary_from_row(row, &store.identities)?);
     }
 
@@ -1832,6 +1843,7 @@ pub fn get_history_session(
         };
 
         responses.push(HistoryResponseRecord {
+            student_uuid: participant.student_uuid.clone(),
             roster_number: participant.roster_number,
             display_name,
             rotation,
@@ -1847,6 +1859,414 @@ pub fn get_history_session(
         legend: snapshot.legend,
         responses,
     })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryStudentRecord {
+    student_uuid: String,
+    class_uuid: String,
+    class_label: String,
+    school_year: Option<String>,
+    display_name: String,
+    active: bool,
+}
+
+/// Verifica se lo UUID di un alunno compare ancora nello storico, includendo
+/// sia le risposte sia gli snapshot delle sessioni senza risposta acquisita.
+fn student_has_history(connection: &Connection, student_uuid: &str) -> Result<bool, String> {
+    let has_response = connection
+        .query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM responses WHERE student_uuid = ?1 LIMIT 1
+             )",
+            [student_uuid],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(|error| format!("Impossibile verificare le risposte storiche: {error}"))?
+        == 1;
+
+    if has_response {
+        return Ok(true);
+    }
+
+    let mut statement = connection
+        .prepare("SELECT questionnaire_snapshot_json FROM sessions")
+        .map_err(|error| format!("Impossibile verificare gli snapshot storici: {error}"))?;
+
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| format!("Impossibile leggere gli snapshot storici: {error}"))?;
+
+    for snapshot_json in rows {
+        let snapshot_json = snapshot_json
+            .map_err(|error| format!("Impossibile leggere uno snapshot storico: {error}"))?;
+        let snapshot: SessionQuestionnaireSnapshot = serde_json::from_str(&snapshot_json)
+            .map_err(|error| format!("Snapshot della sessione non valido: {error}"))?;
+
+        if snapshot
+            .participants
+            .iter()
+            .any(|participant| participant.student_uuid == student_uuid)
+        {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+/// Rimuove da uno snapshot di sessione gli studenti indicati e restituisce il
+/// JSON aggiornato insieme al numero di partecipazioni eliminate.
+fn snapshot_without_students(
+    snapshot_json: &str,
+    student_uuids: &std::collections::HashSet<String>,
+) -> Result<(String, usize), String> {
+    let mut snapshot: SessionQuestionnaireSnapshot = serde_json::from_str(snapshot_json)
+        .map_err(|error| format!("Snapshot della sessione non valido: {error}"))?;
+
+    let before = snapshot.participants.len();
+    snapshot
+        .participants
+        .retain(|participant| !student_uuids.contains(&participant.student_uuid));
+    let removed = before.saturating_sub(snapshot.participants.len());
+
+    let updated_json = serde_json::to_string(&snapshot)
+        .map_err(|error| format!("Impossibile aggiornare lo snapshot della sessione: {error}"))?;
+
+    Ok((updated_json, removed))
+}
+
+/// Restituisce gli alunni che compaiono almeno una volta nello storico,
+/// eventualmente limitandoli a una singola classe.
+///
+/// I nominativi vengono letti esclusivamente da `identities.db`; nessun nome
+/// viene copiato nel database pseudonimizzato.
+#[tauri::command]
+pub fn list_history_students(
+    class_uuid: Option<String>,
+    state: State<'_, StoreState>,
+) -> Result<Vec<HistoryStudentRecord>, String> {
+    let guard = state
+        .inner
+        .lock()
+        .map_err(|_| "Stato del database non disponibile.".to_string())?;
+    let store = guard
+        .as_ref()
+        .ok_or_else(|| "FEED è bloccato. Sblocca l'archivio per continuare.".to_string())?;
+
+    let mut historical_uuids = std::collections::HashSet::new();
+
+    let sql = if class_uuid.is_some() {
+        "SELECT questionnaire_snapshot_json FROM sessions WHERE class_uuid = ?1"
+    } else {
+        "SELECT questionnaire_snapshot_json FROM sessions"
+    };
+
+    let mut statement = store
+        .data
+        .prepare(sql)
+        .map_err(|error| format!("Impossibile preparare la ricerca nello storico: {error}"))?;
+
+    let mut rows = if let Some(class_uuid) = class_uuid.as_deref() {
+        statement
+            .query([class_uuid])
+            .map_err(|error| format!("Impossibile leggere lo storico: {error}"))?
+    } else {
+        statement
+            .query([])
+            .map_err(|error| format!("Impossibile leggere lo storico: {error}"))?
+    };
+
+    while let Some(row) = rows
+        .next()
+        .map_err(|error| format!("Impossibile leggere lo storico: {error}"))?
+    {
+        let snapshot_json: String = row
+            .get(0)
+            .map_err(|error| format!("Impossibile leggere uno snapshot storico: {error}"))?;
+        let snapshot: SessionQuestionnaireSnapshot = serde_json::from_str(&snapshot_json)
+            .map_err(|error| format!("Snapshot della sessione non valido: {error}"))?;
+
+        for participant in snapshot.participants {
+            historical_uuids.insert(participant.student_uuid);
+        }
+    }
+
+    drop(rows);
+    drop(statement);
+
+    let mut student_statement = store
+        .identities
+        .prepare(
+            "SELECT student_uuid, class_uuid, display_name, active
+             FROM students
+             ORDER BY display_name COLLATE NOCASE, class_uuid",
+        )
+        .map_err(|error| format!("Impossibile preparare la lista degli alunni: {error}"))?;
+
+    let student_rows = student_statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)? == 1,
+            ))
+        })
+        .map_err(|error| format!("Impossibile leggere gli alunni: {error}"))?;
+
+    let mut students = Vec::new();
+
+    for row in student_rows {
+        let (student_uuid, student_class_uuid, display_name, active) =
+            row.map_err(|error| format!("Impossibile leggere un alunno: {error}"))?;
+
+        if !historical_uuids.contains(&student_uuid) {
+            continue;
+        }
+
+        if class_uuid
+            .as_deref()
+            .is_some_and(|filter| filter != student_class_uuid)
+        {
+            continue;
+        }
+
+        let (class_label, school_year) =
+            history_class_info(&store.identities, &student_class_uuid)?;
+
+        students.push(HistoryStudentRecord {
+            student_uuid,
+            class_uuid: student_class_uuid,
+            class_label,
+            school_year,
+            display_name,
+            active,
+        });
+    }
+
+    students.sort_by(|a, b| {
+        a.display_name
+            .to_lowercase()
+            .cmp(&b.display_name.to_lowercase())
+            .then_with(|| {
+                a.class_label
+                    .to_lowercase()
+                    .cmp(&b.class_label.to_lowercase())
+            })
+    });
+
+    Ok(students)
+}
+
+/// Elimina uno o più dati da una singola sessione.
+///
+/// Oltre alla risposta, rimuove lo UUID dello studente dallo snapshot della
+/// sessione: il dato non rimane quindi come partecipazione pseudonimizzata
+/// priva di risposta.
+#[tauri::command]
+pub fn delete_history_entries(
+    session_uuid: String,
+    student_uuids: Vec<String>,
+    state: State<'_, StoreState>,
+) -> Result<usize, String> {
+    if student_uuids.is_empty() {
+        return Err("Seleziona almeno un dato da eliminare.".to_string());
+    }
+    if student_uuids.len() > 100 {
+        return Err("Sono stati selezionati troppi dati in una sola operazione.".to_string());
+    }
+
+    let targets: std::collections::HashSet<String> = student_uuids
+        .into_iter()
+        .filter(|value| !value.trim().is_empty())
+        .collect();
+
+    if targets.is_empty() {
+        return Err("Seleziona almeno un dato da eliminare.".to_string());
+    }
+
+    let mut guard = state
+        .inner
+        .lock()
+        .map_err(|_| "Stato del database non disponibile.".to_string())?;
+    let store = guard
+        .as_mut()
+        .ok_or_else(|| "FEED è bloccato. Sblocca l'archivio per continuare.".to_string())?;
+
+    let transaction = store
+        .data
+        .transaction()
+        .map_err(|error| format!("Impossibile iniziare la cancellazione: {error}"))?;
+
+    let snapshot_json = transaction
+        .query_row(
+            "SELECT questionnaire_snapshot_json FROM sessions WHERE session_uuid = ?1",
+            [session_uuid.as_str()],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| format!("Impossibile leggere la sessione: {error}"))?
+        .ok_or_else(|| "Sessione FEED non trovata.".to_string())?;
+
+    for student_uuid in &targets {
+        transaction
+            .execute(
+                "DELETE FROM responses WHERE session_uuid = ?1 AND student_uuid = ?2",
+                params![session_uuid.as_str(), student_uuid.as_str()],
+            )
+            .map_err(|error| format!("Impossibile eliminare una risposta: {error}"))?;
+    }
+
+    let (updated_snapshot, removed) = snapshot_without_students(&snapshot_json, &targets)?;
+
+    transaction
+        .execute(
+            "UPDATE sessions
+             SET questionnaire_snapshot_json = ?2
+             WHERE session_uuid = ?1",
+            params![session_uuid.as_str(), updated_snapshot],
+        )
+        .map_err(|error| format!("Impossibile aggiornare la sessione: {error}"))?;
+
+    transaction
+        .commit()
+        .map_err(|error| format!("Impossibile completare la cancellazione: {error}"))?;
+
+    Ok(removed)
+}
+
+/// Elimina tutti i dati storici riferiti a un singolo alunno mantenendo
+/// invariata la sua scheda nel database separato delle identità.
+///
+/// Vengono rimosse sia le risposte sia tutte le partecipazioni negli snapshot,
+/// così lo UUID dell'alunno non rimane nei dati storici locali.
+#[tauri::command]
+pub fn delete_student_history(
+    student_uuid: String,
+    state: State<'_, StoreState>,
+) -> Result<usize, String> {
+    if student_uuid.trim().is_empty() {
+        return Err("Alunno non valido.".to_string());
+    }
+
+    let mut guard = state
+        .inner
+        .lock()
+        .map_err(|_| "Stato del database non disponibile.".to_string())?;
+    let store = guard
+        .as_mut()
+        .ok_or_else(|| "FEED è bloccato. Sblocca l'archivio per continuare.".to_string())?;
+
+    let transaction = store
+        .data
+        .transaction()
+        .map_err(|error| format!("Impossibile iniziare la cancellazione: {error}"))?;
+
+    transaction
+        .execute(
+            "DELETE FROM responses WHERE student_uuid = ?1",
+            [student_uuid.as_str()],
+        )
+        .map_err(|error| format!("Impossibile eliminare le risposte dell'alunno: {error}"))?;
+
+    let sessions = {
+        let mut statement = transaction
+            .prepare("SELECT session_uuid, questionnaire_snapshot_json FROM sessions")
+            .map_err(|error| format!("Impossibile preparare gli snapshot: {error}"))?;
+
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|error| format!("Impossibile leggere gli snapshot: {error}"))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("Impossibile leggere gli snapshot: {error}"))?
+    };
+
+    let targets = std::collections::HashSet::from([student_uuid.clone()]);
+    let mut modified_sessions = 0usize;
+
+    for (session_uuid, snapshot_json) in sessions {
+        let (updated_snapshot, removed) = snapshot_without_students(&snapshot_json, &targets)?;
+        if removed == 0 {
+            continue;
+        }
+
+        transaction
+            .execute(
+                "UPDATE sessions
+                 SET questionnaire_snapshot_json = ?2
+                 WHERE session_uuid = ?1",
+                params![session_uuid, updated_snapshot],
+            )
+            .map_err(|error| format!("Impossibile aggiornare una sessione: {error}"))?;
+
+        modified_sessions += 1;
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("Impossibile completare la cancellazione: {error}"))?;
+
+    Ok(modified_sessions)
+}
+
+/// Elimina un'intera sessione storica con tutte le risposte collegate e
+/// rimuove anche il questionario se non è più referenziato da altre sessioni.
+#[tauri::command]
+pub fn delete_history_session(
+    session_uuid: String,
+    state: State<'_, StoreState>,
+) -> Result<(), String> {
+    let mut guard = state
+        .inner
+        .lock()
+        .map_err(|_| "Stato del database non disponibile.".to_string())?;
+    let store = guard
+        .as_mut()
+        .ok_or_else(|| "FEED è bloccato. Sblocca l'archivio per continuare.".to_string())?;
+
+    let transaction = store
+        .data
+        .transaction()
+        .map_err(|error| format!("Impossibile iniziare la cancellazione: {error}"))?;
+
+    let questionnaire_uuid = transaction
+        .query_row(
+            "SELECT questionnaire_uuid FROM sessions WHERE session_uuid = ?1",
+            [session_uuid.as_str()],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| format!("Impossibile leggere la sessione: {error}"))?
+        .ok_or_else(|| "Sessione FEED non trovata.".to_string())?;
+
+    transaction
+        .execute(
+            "DELETE FROM sessions WHERE session_uuid = ?1",
+            [session_uuid.as_str()],
+        )
+        .map_err(|error| format!("Impossibile eliminare la sessione: {error}"))?;
+
+    transaction
+        .execute(
+            "DELETE FROM questionnaires
+             WHERE questionnaire_uuid = ?1
+               AND NOT EXISTS(
+                 SELECT 1 FROM sessions WHERE questionnaire_uuid = ?1
+               )",
+            [questionnaire_uuid.as_str()],
+        )
+        .map_err(|error| format!("Impossibile eliminare il questionario: {error}"))?;
+
+    transaction
+        .commit()
+        .map_err(|error| format!("Impossibile completare la cancellazione: {error}"))?;
+
+    Ok(())
 }
 
 #[tauri::command]

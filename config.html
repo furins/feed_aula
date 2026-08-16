@@ -704,6 +704,34 @@
       classSelect.addEventListener('change', loadSelectedClass);
     }
 
+
+    function dedicatedScanTarget(target) {
+      const targetUrl = new URL(target, window.location.href);
+      const localScanUrl = new URL('scan.html', window.location.href);
+
+      if (targetUrl.origin !== localScanUrl.origin ||
+          !targetUrl.pathname.endsWith('/scan.html')) {
+        throw new Error(
+          'La finestra separata è disponibile solo per la pagina di Scansione locale di FEED.'
+        );
+      }
+
+      targetUrl.searchParams.set('finestraSeparata', 'true');
+      return `scan.html${targetUrl.search}`;
+    }
+
+    async function openScanTarget(target) {
+      if (!window.__TAURI__) {
+        window.open(target, '_blank', 'noopener');
+        return;
+      }
+
+      await invoke('open_scan_window', {
+        target: dedicatedScanTarget(target)
+      });
+      copyStatus.textContent = 'Scansione aperta in una finestra separata.';
+    }
+
     async function copyUrl() {
       const text = generatedUrl.value;
       if (!text) return;
@@ -756,7 +784,7 @@
 
     copyBtn.addEventListener('click', copyUrl);
 
-    openBtn.addEventListener('click', () => {
+    openBtn.addEventListener('click', async () => {
       const target = generatedUrl.value.trim();
       if (!target) return;
 
@@ -766,8 +794,15 @@
         return;
       }
 
-      if (window.__TAURI__) window.location.assign(target);
-      else window.open(target, '_blank', 'noopener');
+      openBtn.disabled = true;
+      try {
+        await openScanTarget(target);
+      } catch (error) {
+        copyStatus.textContent =
+          typeof error === 'string' ? error : (error?.message || String(error));
+      } finally {
+        openBtn.disabled = classSelect.value ? classStudents.length === 0 : false;
+      }
     });
 
     generatedUrl.addEventListener('click', () => generatedUrl.select());

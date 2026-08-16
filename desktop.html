@@ -444,7 +444,7 @@
             <h3>Scansione</h3>
             <p>Apri direttamente la schermata di acquisizione delle risposte.</p>
           </div>
-          <a class="action-link" href="scan.html">Apri scansione</a>
+          <a id="openScanLink" class="action-link" href="scan.html">Apri scansione</a>
         </article>
 
         <article class="panel card">
@@ -478,6 +478,7 @@
     const fatalState = document.getElementById('fatalState');
     const fatalMessage = document.getElementById('fatalMessage');
     const dashboard = document.getElementById('dashboard');
+    const openScanLink = document.getElementById('openScanLink');
 
     const createPassword = document.getElementById('createPassword');
     const confirmPassword = document.getElementById('confirmPassword');
@@ -668,6 +669,23 @@
         setLockState(true);
       } finally {
         lockToggle.disabled = false;
+      }
+    });
+
+    openScanLink.addEventListener('click', async event => {
+      event.preventDefault();
+
+      if (!window.__TAURI__) {
+        window.location.assign('scan.html');
+        return;
+      }
+
+      try {
+        await invoke('open_scan_window', {
+          target: 'scan.html?finestraSeparata=true'
+        });
+      } catch (error) {
+        window.alert(typeof error === 'string' ? error : (error?.message || String(error)));
       }
     });
 
