@@ -40,7 +40,7 @@
     button, input, select { font: inherit; }
 
     .shell {
-      width: min(1240px, calc(100% - 32px));
+      width: min(1260px, calc(100% - 32px));
       margin: 0 auto;
       padding: 30px 0 52px;
     }
@@ -79,7 +79,11 @@
 
     .toolbar {
       display: grid;
-      grid-template-columns: minmax(180px, .75fr) minmax(180px, 1fr) minmax(210px, 1.1fr) auto;
+      grid-template-columns:
+        minmax(220px, 1.15fr)
+        minmax(170px, .72fr)
+        minmax(220px, 1fr)
+        auto;
       gap: 12px;
       align-items: end;
     }
@@ -120,6 +124,8 @@
     button:disabled { opacity: .48; cursor: not-allowed; }
 
     .secondary { background: var(--accent-soft); color: var(--accent-dark); }
+    .primary { background: var(--accent); color: #fff; }
+    .primary:hover:not(:disabled) { background: var(--accent-dark); }
     .danger { background: var(--danger-soft); color: var(--danger); }
     .danger-solid { background: var(--danger); color: #fff; }
 
@@ -176,8 +182,19 @@
       background: var(--accent-soft);
     }
 
-    .session-title { display: block; font-weight: 850; line-height: 1.3; }
-    .session-meta { display: block; margin-top: 5px; color: var(--muted); font-size: .82rem; line-height: 1.4; }
+    .session-title {
+      display: block;
+      font-weight: 850;
+      line-height: 1.3;
+    }
+
+    .session-meta {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: .82rem;
+      line-height: 1.4;
+    }
 
     .session-footer {
       display: flex;
@@ -229,7 +246,13 @@
     }
 
     .detail-header h2 { margin: 0; font-size: 1.3rem; }
-    .detail-meta { margin: 6px 0 0; color: var(--muted); line-height: 1.45; font-size: .9rem; }
+
+    .detail-meta {
+      margin: 6px 0 0;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: .9rem;
+    }
 
     .detail-actions {
       display: flex;
@@ -281,7 +304,11 @@
       border-radius: 0 13px 13px 0;
     }
 
-    .row-check { width: 19px; height: 19px; accent-color: var(--accent); }
+    .row-check {
+      width: 19px;
+      height: 19px;
+      accent-color: var(--accent);
+    }
 
     .message {
       min-height: 1.35em;
@@ -303,13 +330,13 @@
 
     [hidden] { display: none !important; }
 
-    @media (max-width: 960px) {
-      .layout { grid-template-columns: 1fr; }
+    @media (max-width: 1050px) {
       .toolbar { grid-template-columns: 1fr 1fr; }
+      .layout { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 620px) {
-      .shell { width: min(100% - 20px, 1240px); padding-top: 20px; }
+      .shell { width: min(100% - 20px, 1260px); padding-top: 20px; }
       .panel { padding: 16px; border-radius: 18px; }
       .toolbar { grid-template-columns: 1fr; }
       .detail-header { display: block; }
@@ -336,6 +363,13 @@
       <section class="panel">
         <div class="toolbar">
           <label class="field">
+            Questionario
+            <select id="questionnaireFilter">
+              <option value="">Tutti i questionari</option>
+            </select>
+          </label>
+
+          <label class="field">
             Classe
             <select id="classFilter">
               <option value="">Tutte le classi</option>
@@ -344,18 +378,20 @@
 
           <label class="field">
             Nome contiene
-            <input id="nameFilter" type="search" maxlength="120" placeholder="Es. Rossi" autocomplete="off" />
-          </label>
-
-          <label class="field">
-            Alunno
-            <select id="studentFilter">
-              <option value="">Tutti gli alunni</option>
-            </select>
+            <input
+              id="nameFilter"
+              type="search"
+              maxlength="120"
+              placeholder="Es. Rossi"
+              autocomplete="off"
+              list="studentSuggestions"
+            />
+            <datalist id="studentSuggestions"></datalist>
           </label>
 
           <div class="filter-actions">
             <button id="clearFiltersBtn" class="secondary" type="button">Azzera filtri</button>
+            <button id="exportCsvBtn" class="primary" type="button">Esporta in formato CSV</button>
           </div>
         </div>
 
@@ -371,12 +407,12 @@
 
       <div class="layout">
         <section class="panel">
-          <div id="sessionsEmpty" class="empty" hidden>Nessuna sessione corrisponde ai filtri.</div>
+          <div id="sessionsEmpty" class="empty" hidden>Nessun questionario corrisponde ai filtri.</div>
           <div id="sessionList" class="session-list"></div>
         </section>
 
         <section class="panel">
-          <div id="detailEmpty" class="empty">Seleziona una sessione per vedere i dati raccolti.</div>
+          <div id="detailEmpty" class="empty">Seleziona un questionario per vedere i dati raccolti.</div>
 
           <div id="detail" hidden>
             <div class="detail-header">
@@ -395,7 +431,9 @@
                 <button id="selectAllBtn" class="secondary" type="button">Seleziona tutti</button>
                 <button id="deselectAllBtn" class="secondary" type="button">Deseleziona tutti</button>
               </div>
-              <button id="deleteSelectedBtn" class="danger-solid" type="button" disabled>Elimina selezionati</button>
+              <button id="deleteSelectedBtn" class="danger-solid" type="button" disabled>
+                Elimina selezionati
+              </button>
             </div>
 
             <div class="table-wrap">
@@ -434,10 +472,12 @@
     const fatal = document.getElementById('fatal');
     const fatalMessage = document.getElementById('fatalMessage');
 
+    const questionnaireFilter = document.getElementById('questionnaireFilter');
     const classFilter = document.getElementById('classFilter');
     const nameFilter = document.getElementById('nameFilter');
-    const studentFilter = document.getElementById('studentFilter');
+    const studentSuggestions = document.getElementById('studentSuggestions');
     const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
     const deleteStudentHistoryBtn = document.getElementById('deleteStudentHistoryBtn');
     const historySummary = document.getElementById('historySummary');
 
@@ -457,6 +497,7 @@
     const historyMessage = document.getElementById('historyMessage');
 
     let sessions = [];
+    let questionnaireCatalog = [];
     let historicalStudents = [];
     let selectedSessionUuid = null;
     let currentDetail = null;
@@ -495,32 +536,92 @@
       return { text: 'Non chiusa', kind: 'open' };
     }
 
-    function formatAnswer(legend, rotation) {
-      if (rotation === null || rotation === undefined) return '—';
+    function answerParts(legend, rotation) {
+      if (rotation === null || rotation === undefined) {
+        return { text: '', emoji: '' };
+      }
+
       const entry = legend?.values?.[String(rotation)] ?? legend?.values?.[rotation];
-      if (!entry) return `${rotation}°`;
-      const text = entry.text || 'N.A.';
-      const emoji = entry.emoji || '';
-      return emoji && text !== 'N.A.' ? `${text} ${emoji}` : text;
+      if (!entry) return { text: `${rotation}°`, emoji: '' };
+
+      return {
+        text: entry.text || 'N.A.',
+        emoji: entry.emoji || ''
+      };
     }
 
-    function selectedStudent() {
-      return historicalStudents.find(item => item.studentUuid === studentFilter.value) || null;
+    function formatAnswer(legend, rotation) {
+      const entry = answerParts(legend, rotation);
+      if (!entry.text) return '—';
+      return entry.emoji && entry.text !== 'N.A.'
+        ? `${entry.text} ${entry.emoji}`
+        : entry.text;
     }
 
-    function filteredStudentUuids() {
-      if (studentFilter.value) return [studentFilter.value];
+    function normalizedNameQuery() {
+      return nameFilter.value.trim().toLocaleLowerCase('it');
+    }
 
-      const query = nameFilter.value.trim().toLocaleLowerCase('it');
+    function matchingStudents() {
+      const query = normalizedNameQuery();
+      if (!query) return historicalStudents;
+
+      return historicalStudents.filter(student =>
+        student.displayName.toLocaleLowerCase('it').includes(query)
+      );
+    }
+
+    function matchingStudentUuids() {
+      const query = normalizedNameQuery();
+      if (!query) return null;
+      return matchingStudents().map(student => student.studentUuid);
+    }
+
+    function singleMatchingStudent() {
+      const query = normalizedNameQuery();
       if (!query) return null;
 
-      return historicalStudents
-        .filter(item => item.displayName.toLocaleLowerCase('it').includes(query))
-        .map(item => item.studentUuid);
+      const matches = matchingStudents();
+      const exact = matches.filter(
+        student => student.displayName.toLocaleLowerCase('it') === query
+      );
+
+      if (exact.length === 1) return exact[0];
+      if (matches.length === 1) return matches[0];
+      return null;
+    }
+
+    function updateAutocomplete() {
+      studentSuggestions.innerHTML = '';
+
+      for (const student of historicalStudents) {
+        const option = document.createElement('option');
+        option.value = student.displayName;
+
+        const classText = student.schoolYear
+          ? `${student.classLabel} · ${student.schoolYear}`
+          : student.classLabel;
+
+        option.label = classText;
+        studentSuggestions.appendChild(option);
+      }
+
+      updateStudentDeleteButton();
+    }
+
+    function updateStudentDeleteButton() {
+      const student = singleMatchingStudent();
+      deleteStudentHistoryBtn.hidden = !student;
+
+      if (student) {
+        deleteStudentHistoryBtn.textContent =
+          `Elimina tutti i dati storici di ${student.displayName}`;
+      }
     }
 
     function fillClassFilter(classes) {
       classFilter.innerHTML = '<option value="">Tutte le classi</option>';
+
       for (const item of classes) {
         const option = document.createElement('option');
         option.value = item.classUuid;
@@ -531,59 +632,63 @@
       }
     }
 
-    function refillStudentFilter(preserveSelection = true) {
-      const previous = preserveSelection ? studentFilter.value : '';
-      const query = nameFilter.value.trim().toLocaleLowerCase('it');
+    function fillQuestionnaireFilter() {
+      const previous = questionnaireFilter.value;
+      questionnaireFilter.innerHTML = '<option value="">Tutti i questionari</option>';
 
-      studentFilter.innerHTML = '<option value="">Tutti gli alunni</option>';
+      const unique = new Map();
+      for (const item of questionnaireCatalog) {
+        if (!unique.has(item.questionnaireUuid)) {
+          unique.set(item.questionnaireUuid, item);
+        }
+      }
 
-      const matches = historicalStudents.filter(item =>
-        !query || item.displayName.toLocaleLowerCase('it').includes(query)
-      );
-
-      for (const item of matches) {
+      for (const item of unique.values()) {
         const option = document.createElement('option');
-        option.value = item.studentUuid;
-        const classSuffix = item.schoolYear
-          ? `${item.classLabel} · ${item.schoolYear}`
-          : item.classLabel;
-        option.textContent = `${item.displayName} — ${classSuffix}`;
-        studentFilter.appendChild(option);
+        option.value = item.questionnaireUuid;
+
+        const date = localDateTime(item.startedAt);
+        const code = item.code ? ` · ${item.code}` : '';
+        option.textContent =
+          `${item.title || 'Questionario'}${code} · ${item.classLabel} · ${date}`;
+
+        questionnaireFilter.appendChild(option);
       }
 
-      if (previous && matches.some(item => item.studentUuid === previous)) {
-        studentFilter.value = previous;
-      }
-
-      updateStudentDeleteButton();
-    }
-
-    function updateStudentDeleteButton() {
-      const student = selectedStudent();
-      deleteStudentHistoryBtn.hidden = !student;
-      if (student) {
-        deleteStudentHistoryBtn.textContent = `Elimina tutti i dati storici di ${student.displayName}`;
+      if ([...questionnaireFilter.options].some(option => option.value === previous)) {
+        questionnaireFilter.value = previous;
       }
     }
 
-    async function loadHistoricalStudents(preserveSelection = true) {
-      const previous = preserveSelection ? studentFilter.value : '';
-      historicalStudents = await invoke('list_history_students', {
-        classUuid: classFilter.value || null
+    async function loadQuestionnaireCatalog() {
+      questionnaireCatalog = await invoke('list_history_sessions', {
+        classUuid: null,
+        questionnaireUuid: null,
+        studentUuids: null
       });
-      refillStudentFilter(false);
-      if (previous && historicalStudents.some(item => item.studentUuid === previous)) {
-        studentFilter.value = previous;
-      }
-      updateStudentDeleteButton();
+      fillQuestionnaireFilter();
+    }
+
+    async function loadHistoricalStudents() {
+      historicalStudents = await invoke('list_history_students', {
+        classUuid: classFilter.value || null,
+        questionnaireUuid: questionnaireFilter.value || null
+      });
+      updateAutocomplete();
     }
 
     function renderSessions() {
       sessionList.innerHTML = '';
       sessionsEmpty.hidden = sessions.length > 0;
-      historySummary.textContent = sessions.length === 1
-        ? '1 sessione'
-        : `${sessions.length} sessioni`;
+      exportCsvBtn.disabled = sessions.length === 0;
+
+      const name = nameFilter.value.trim();
+      const suffix = name
+        ? ` · filtro alunno: “${name}”`
+        : '';
+
+      historySummary.textContent =
+        `${sessions.length === 1 ? '1 questionario' : `${sessions.length} questionari`}${suffix}`;
 
       for (const item of sessions) {
         const status = sessionStatus(item);
@@ -620,18 +725,20 @@
       }
     }
 
+    function visibleResponses(data) {
+      const allowedUuids = matchingStudentUuids();
+      if (allowedUuids === null) return data.responses;
+
+      const allowed = new Set(allowedUuids);
+      return data.responses.filter(response => allowed.has(response.studentUuid));
+    }
+
     function updateDeleteSelectedButton() {
       const selected = responsesBody.querySelectorAll('.row-check:checked').length;
       deleteSelectedBtn.disabled = selected === 0;
       deleteSelectedBtn.textContent = selected
         ? `Elimina selezionati (${selected})`
         : 'Elimina selezionati';
-    }
-
-    function visibleResponses(data) {
-      const studentUuid = studentFilter.value;
-      if (!studentUuid) return data.responses;
-      return data.responses.filter(response => response.studentUuid === studentUuid);
     }
 
     function renderDetail(data) {
@@ -706,18 +813,31 @@
       deselectAllBtn.disabled = rows.length === 0;
       updateDeleteSelectedButton();
 
-      detailEmpty.hidden = true;
+      detailEmpty.hidden = false;
       detail.hidden = false;
+
+      if (rows.length === 0) {
+        detailEmpty.textContent = 'Nessun alunno di questo questionario corrisponde al filtro.';
+        detailEmpty.hidden = false;
+        detail.hidden = true;
+      } else {
+        detailEmpty.hidden = true;
+      }
     }
 
     async function loadSessions(preferredSessionUuid = null) {
       setMessage('');
+
       sessions = await invoke('list_history_sessions', {
         classUuid: classFilter.value || null,
-        studentUuids: filteredStudentUuids()
+        questionnaireUuid: questionnaireFilter.value || null,
+        studentUuids: matchingStudentUuids()
       });
 
-      if (preferredSessionUuid && sessions.some(item => item.sessionUuid === preferredSessionUuid)) {
+      if (
+        preferredSessionUuid &&
+        sessions.some(item => item.sessionUuid === preferredSessionUuid)
+      ) {
         selectedSessionUuid = preferredSessionUuid;
       } else {
         selectedSessionUuid = sessions[0]?.sessionUuid || null;
@@ -731,6 +851,7 @@
         currentDetail = null;
         detail.hidden = true;
         detailEmpty.hidden = false;
+        detailEmpty.textContent = 'Nessun questionario corrisponde ai filtri.';
       }
     }
 
@@ -750,17 +871,143 @@
       }
     }
 
-    async function refreshAfterDeletion(preferredSessionUuid = null) {
-      const selectedUuid = studentFilter.value;
-      await loadHistoricalStudents(true);
+    async function applyStructuralFilters() {
+      await loadHistoricalStudents();
+      updateStudentDeleteButton();
+      await loadSessions();
+    }
 
-      if (selectedUuid && !historicalStudents.some(item => item.studentUuid === selectedUuid)) {
-        studentFilter.value = '';
-        nameFilter.value = '';
+    async function applyNameFilter() {
+      updateStudentDeleteButton();
+      await loadSessions();
+    }
+
+    async function refreshAfterDeletion(preferredSessionUuid = null) {
+      await loadQuestionnaireCatalog();
+
+      if (
+        questionnaireFilter.value &&
+        !questionnaireCatalog.some(
+          item => item.questionnaireUuid === questionnaireFilter.value
+        )
+      ) {
+        questionnaireFilter.value = '';
       }
 
-      refillStudentFilter(true);
+      await loadHistoricalStudents();
       await loadSessions(preferredSessionUuid);
+    }
+
+    function csvEscape(value) {
+      const text = String(value ?? '');
+      if (/[",\r\n]/.test(text)) {
+        return `"${text.replace(/"/g, '""')}"`;
+      }
+      return text;
+    }
+
+    function localTimestamp(date = new Date()) {
+      const pad = value => String(value).padStart(2, '0');
+      return (
+        `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}` +
+        `_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+      );
+    }
+
+    function safeFilename(value) {
+      return String(value || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9._-]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 80);
+    }
+
+    function downloadText(filename, text, type) {
+      const blob = new Blob([text], { type });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    async function exportFilteredCsv() {
+      if (!sessions.length) {
+        setMessage('Non ci sono dati da esportare con i filtri correnti.', 'error');
+        return;
+      }
+
+      exportCsvBtn.disabled = true;
+      setMessage('Preparazione del CSV…');
+
+      try {
+        const lines = [[
+          'ID_Questionario',
+          'Titolo questionario',
+          'Classe',
+          'Alunno',
+          'valore_risposta',
+          'icona_risposta'
+        ].map(csvEscape).join(',')];
+
+        let exportedRows = 0;
+
+        for (const session of sessions) {
+          const data = await invoke('get_history_session', {
+            sessionUuid: session.sessionUuid
+          });
+
+          for (const response of visibleResponses(data)) {
+            const answer = answerParts(data.legend, response.rotation);
+
+            lines.push([
+              data.session.questionnaireUuid,
+              data.session.title || 'Questionario',
+              data.session.classLabel,
+              response.displayName || '',
+              answer.text,
+              answer.emoji
+            ].map(csvEscape).join(','));
+
+            exportedRows += 1;
+          }
+        }
+
+        if (exportedRows === 0) {
+          setMessage('Non ci sono righe da esportare con i filtri correnti.', 'error');
+          return;
+        }
+
+        const selectedQuestionnaire = questionnaireCatalog.find(
+          item => item.questionnaireUuid === questionnaireFilter.value
+        );
+
+        const base = selectedQuestionnaire
+          ? safeFilename(selectedQuestionnaire.title || 'questionario')
+          : 'storico_filtrato';
+
+        downloadText(
+          `FEED_${base}_${localTimestamp()}.csv`,
+          '\uFEFF' + lines.join('\r\n'),
+          'text/csv;charset=utf-8'
+        );
+
+        setMessage(`${exportedRows} righe esportate in CSV.`, 'ok');
+
+        window.alert(
+          'Attenzione: il file CSV appena esportato non è cifrato e contiene dati identificativi. ' +
+          'Non va conservato nel proprio computer. Utilizzalo esclusivamente per produrre ' +
+          'indagini anonimizzate e cancellalo subito dopo aver completato l’elaborazione.'
+        );
+      } catch (error) {
+        setMessage(errorText(error), 'error');
+      } finally {
+        exportCsvBtn.disabled = sessions.length === 0;
+      }
     }
 
     selectAllBtn.addEventListener('click', () => {
@@ -799,6 +1046,7 @@
           sessionUuid: selectedSessionUuid,
           studentUuids
         });
+
         const keepSession = selectedSessionUuid;
         await refreshAfterDeletion(keepSession);
         setMessage('Dati selezionati eliminati.', 'ok');
@@ -822,7 +1070,9 @@
       deleteSessionBtn.disabled = true;
 
       try {
-        await invoke('delete_history_session', { sessionUuid: selectedSessionUuid });
+        await invoke('delete_history_session', {
+          sessionUuid: selectedSessionUuid
+        });
         await refreshAfterDeletion();
         setMessage('Questionario e dati storici eliminati.', 'ok');
       } catch (error) {
@@ -833,7 +1083,7 @@
     });
 
     deleteStudentHistoryBtn.addEventListener('click', async () => {
-      const student = selectedStudent();
+      const student = singleMatchingStudent();
       if (!student) return;
 
       const confirmed = window.confirm(
@@ -847,12 +1097,16 @@
       deleteStudentHistoryBtn.disabled = true;
 
       try {
-        await invoke('delete_student_history', { studentUuid: student.studentUuid });
-        studentFilter.value = '';
+        await invoke('delete_student_history', {
+          studentUuid: student.studentUuid
+        });
+
         nameFilter.value = '';
-        await loadHistoricalStudents(false);
-        await loadSessions();
-        setMessage(`Tutti i dati storici di ${student.displayName} sono stati eliminati.`, 'ok');
+        await refreshAfterDeletion();
+        setMessage(
+          `Tutti i dati storici di ${student.displayName} sono stati eliminati.`,
+          'ok'
+        );
       } catch (error) {
         setMessage(errorText(error), 'error');
       } finally {
@@ -861,46 +1115,58 @@
       }
     });
 
-    classFilter.addEventListener('change', async () => {
-      nameFilter.value = '';
-      studentFilter.value = '';
-      try {
-        await loadHistoricalStudents(false);
-        await loadSessions();
-      } catch (error) {
-        setMessage(errorText(error), 'error');
-      }
+    questionnaireFilter.addEventListener('change', () => {
+      applyStructuralFilters().catch(error => setMessage(errorText(error), 'error'));
+    });
+
+    classFilter.addEventListener('change', () => {
+      applyStructuralFilters().catch(error => setMessage(errorText(error), 'error'));
     });
 
     nameFilter.addEventListener('input', () => {
-      refillStudentFilter(true);
+      updateStudentDeleteButton();
+
       if (nameFilterTimer) clearTimeout(nameFilterTimer);
       nameFilterTimer = setTimeout(() => {
         nameFilterTimer = null;
-        loadSessions().catch(error => setMessage(errorText(error), 'error'));
+        applyNameFilter().catch(error => setMessage(errorText(error), 'error'));
       }, 220);
     });
 
-    studentFilter.addEventListener('change', async () => {
-      updateStudentDeleteButton();
+    nameFilter.addEventListener('change', () => {
+      if (nameFilterTimer) {
+        clearTimeout(nameFilterTimer);
+        nameFilterTimer = null;
+      }
+      applyNameFilter().catch(error => setMessage(errorText(error), 'error'));
+    });
+
+    nameFilter.addEventListener('keydown', event => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+
+      if (nameFilterTimer) {
+        clearTimeout(nameFilterTimer);
+        nameFilterTimer = null;
+      }
+
+      applyNameFilter().catch(error => setMessage(errorText(error), 'error'));
+    });
+
+    clearFiltersBtn.addEventListener('click', async () => {
+      questionnaireFilter.value = '';
+      classFilter.value = '';
+      nameFilter.value = '';
+
       try {
+        await loadHistoricalStudents();
         await loadSessions();
       } catch (error) {
         setMessage(errorText(error), 'error');
       }
     });
 
-    clearFiltersBtn.addEventListener('click', async () => {
-      classFilter.value = '';
-      nameFilter.value = '';
-      studentFilter.value = '';
-      try {
-        await loadHistoricalStudents(false);
-        await loadSessions();
-      } catch (error) {
-        setMessage(errorText(error), 'error');
-      }
-    });
+    exportCsvBtn.addEventListener('click', exportFilteredCsv);
 
     backBtn.addEventListener('click', () => {
       if (window.history.length > 1) window.history.back();
@@ -916,7 +1182,8 @@
         }
 
         fillClassFilter(await invoke('list_classes'));
-        await loadHistoricalStudents(false);
+        await loadQuestionnaireCatalog();
+        await loadHistoricalStudents();
         await loadSessions();
 
         loading.hidden = true;

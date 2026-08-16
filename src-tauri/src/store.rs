@@ -1567,6 +1567,7 @@ pub fn complete_scan_session(
 #[serde(rename_all = "camelCase")]
 pub struct HistorySessionSummary {
     session_uuid: String,
+    questionnaire_uuid: String,
     class_uuid: String,
     class_label: String,
     school_year: Option<String>,
@@ -1625,20 +1626,23 @@ fn history_summary_from_row(
     let session_uuid: String = row
         .get(0)
         .map_err(|error| format!("Impossibile leggere la sessione: {error}"))?;
-    let class_uuid: String = row
+    let questionnaire_uuid: String = row
         .get(1)
+        .map_err(|error| format!("Impossibile leggere il questionario: {error}"))?;
+    let class_uuid: String = row
+        .get(2)
         .map_err(|error| format!("Impossibile leggere la classe della sessione: {error}"))?;
     let snapshot_json: String = row
-        .get(2)
+        .get(3)
         .map_err(|error| format!("Impossibile leggere lo snapshot della sessione: {error}"))?;
     let started_at: String = row
-        .get(3)
+        .get(4)
         .map_err(|error| format!("Impossibile leggere la data della sessione: {error}"))?;
     let completed_at: Option<String> = row
-        .get(4)
+        .get(5)
         .map_err(|error| format!("Impossibile leggere la chiusura della sessione: {error}"))?;
     let response_count: i64 = row
-        .get(5)
+        .get(6)
         .map_err(|error| format!("Impossibile contare le risposte: {error}"))?;
 
     let snapshot: SessionQuestionnaireSnapshot = serde_json::from_str(&snapshot_json)
@@ -1648,6 +1652,7 @@ fn history_summary_from_row(
 
     Ok(HistorySessionSummary {
         session_uuid,
+        questionnaire_uuid,
         class_uuid,
         class_label,
         school_year,
@@ -1664,8 +1669,14 @@ fn history_summary_from_row(
 /// Restituisce le sessioni registrate, eventualmente filtrate per classe.
 /// I nominativi non fanno parte di questo riepilogo e restano in identities.db.
 #[tauri::command]
+/// Restituisce le sessioni registrate applicando i filtri per questionario,
+/// classe e insieme di alunni.
+///
+/// I nominativi restano nel database separato delle identità: il filtro alunno
+/// riceve soltanto gli UUID risolti dal frontend a partire dai nomi mostrati.
 pub fn list_history_sessions(
     class_uuid: Option<String>,
+    questionnaire_uuid: Option<String>,
     student_uuids: Option<Vec<String>>,
     state: State<'_, StoreState>,
 ) -> Result<Vec<HistorySessionSummary>, String> {
@@ -1679,6 +1690,7 @@ pub fn list_history_sessions(
 
     let sql = if class_uuid.is_some() {
         "SELECT s.session_uuid,
+                s.questionnaire_uuid,
                 s.class_uuid,
                 s.questionnaire_snapshot_json,
                 s.started_at,
@@ -1689,6 +1701,7 @@ pub fn list_history_sessions(
          ORDER BY s.started_at DESC, s.session_uuid DESC"
     } else {
         "SELECT s.session_uuid,
+                s.questionnaire_uuid,
                 s.class_uuid,
                 s.questionnaire_snapshot_json,
                 s.started_at,
@@ -1714,16 +1727,27 @@ pub fn list_history_sessions(
     };
 
     let mut sessions = Vec::new();
+
     while let Some(row) = rows
         .next()
         .map_err(|error| format!("Impossibile leggere lo storico: {error}"))?
     {
+        if let Some(questionnaire_uuid) = questionnaire_uuid.as_deref() {
+            let row_questionnaire_uuid: String = row
+                .get(1)
+                .map_err(|error| format!("Impossibile leggere il questionario: {error}"))?;
+
+            if row_questionnaire_uuid != questionnaire_uuid {
+                continue;
+            }
+        }
+
         if let Some(student_uuids) = student_uuids.as_ref() {
             if student_uuids.is_empty() {
                 continue;
             }
 
-            let snapshot_json: String = row.get(2).map_err(|error| {
+            let snapshot_json: String = row.get(3).map_err(|error| {
                 format!("Impossibile leggere lo snapshot della sessione: {error}")
             })?;
             let snapshot: SessionQuestionnaireSnapshot = serde_json::from_str(&snapshot_json)
@@ -1747,6 +1771,8 @@ pub fn list_history_sessions(
 /// Restituisce il dettaglio di una sessione ricostruendo i nominativi soltanto
 /// al momento della lettura dal database separato delle identità.
 #[tauri::command]
+/// Restituisce il dettaglio di una sessione ricostruendo i nominativi soltanto
+/// al momento della lettura dal database separato delle identità.
 pub fn get_history_session(
     session_uuid: String,
     state: State<'_, StoreState>,
@@ -1763,6 +1789,7 @@ pub fn get_history_session(
         .data
         .query_row(
             "SELECT s.session_uuid,
+                    s.questionnaire_uuid,
                     s.class_uuid,
                     s.questionnaire_snapshot_json,
                     s.started_at,
@@ -1777,8 +1804,9 @@ pub fn get_history_session(
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
-                    row.get::<_, Option<String>>(4)?,
-                    row.get::<_, i64>(5)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, i64>(6)?,
                 ))
             },
         )
@@ -1786,21 +1814,22 @@ pub fn get_history_session(
         .map_err(|error| format!("Impossibile leggere la sessione: {error}"))?
         .ok_or_else(|| "Sessione FEED non trovata.".to_string())?;
 
-    let snapshot: SessionQuestionnaireSnapshot = serde_json::from_str(&session_row.2)
+    let snapshot: SessionQuestionnaireSnapshot = serde_json::from_str(&session_row.3)
         .map_err(|error| format!("Snapshot della sessione non valido: {error}"))?;
-    let (class_label, school_year) = history_class_info(&store.identities, &session_row.1)?;
+    let (class_label, school_year) = history_class_info(&store.identities, &session_row.2)?;
 
     let session = HistorySessionSummary {
         session_uuid: session_row.0.clone(),
-        class_uuid: session_row.1,
+        questionnaire_uuid: session_row.1,
+        class_uuid: session_row.2,
         class_label,
         school_year,
         code: snapshot.code.clone(),
         title: snapshot.title.clone(),
         test_type: snapshot.test_type.clone(),
-        started_at: session_row.3,
-        completed_at: session_row.4,
-        response_count: session_row.5,
+        started_at: session_row.4,
+        completed_at: session_row.5,
+        response_count: session_row.6,
         participant_count: snapshot.participants.len(),
     };
 
@@ -1943,8 +1972,14 @@ fn snapshot_without_students(
 /// I nominativi vengono letti esclusivamente da `identities.db`; nessun nome
 /// viene copiato nel database pseudonimizzato.
 #[tauri::command]
+/// Restituisce gli alunni che compaiono almeno una volta nello storico,
+/// applicando gli eventuali filtri per classe e questionario.
+///
+/// I nominativi vengono letti esclusivamente da `identities.db`; nessun nome
+/// viene copiato nel database pseudonimizzato.
 pub fn list_history_students(
     class_uuid: Option<String>,
+    questionnaire_uuid: Option<String>,
     state: State<'_, StoreState>,
 ) -> Result<Vec<HistoryStudentRecord>, String> {
     let guard = state
@@ -1957,33 +1992,46 @@ pub fn list_history_students(
 
     let mut historical_uuids = std::collections::HashSet::new();
 
-    let sql = if class_uuid.is_some() {
-        "SELECT questionnaire_snapshot_json FROM sessions WHERE class_uuid = ?1"
-    } else {
-        "SELECT questionnaire_snapshot_json FROM sessions"
-    };
-
     let mut statement = store
         .data
-        .prepare(sql)
+        .prepare(
+            "SELECT questionnaire_uuid, class_uuid, questionnaire_snapshot_json
+             FROM sessions
+             ORDER BY started_at DESC, session_uuid DESC",
+        )
         .map_err(|error| format!("Impossibile preparare la ricerca nello storico: {error}"))?;
 
-    let mut rows = if let Some(class_uuid) = class_uuid.as_deref() {
-        statement
-            .query([class_uuid])
-            .map_err(|error| format!("Impossibile leggere lo storico: {error}"))?
-    } else {
-        statement
-            .query([])
-            .map_err(|error| format!("Impossibile leggere lo storico: {error}"))?
-    };
+    let mut rows = statement
+        .query([])
+        .map_err(|error| format!("Impossibile leggere lo storico: {error}"))?;
 
     while let Some(row) = rows
         .next()
         .map_err(|error| format!("Impossibile leggere lo storico: {error}"))?
     {
-        let snapshot_json: String = row
+        let row_questionnaire_uuid: String = row
             .get(0)
+            .map_err(|error| format!("Impossibile leggere il questionario: {error}"))?;
+        let row_class_uuid: String = row
+            .get(1)
+            .map_err(|error| format!("Impossibile leggere la classe: {error}"))?;
+
+        if questionnaire_uuid
+            .as_deref()
+            .is_some_and(|filter| filter != row_questionnaire_uuid)
+        {
+            continue;
+        }
+
+        if class_uuid
+            .as_deref()
+            .is_some_and(|filter| filter != row_class_uuid)
+        {
+            continue;
+        }
+
+        let snapshot_json: String = row
+            .get(2)
             .map_err(|error| format!("Impossibile leggere uno snapshot storico: {error}"))?;
         let snapshot: SessionQuestionnaireSnapshot = serde_json::from_str(&snapshot_json)
             .map_err(|error| format!("Snapshot della sessione non valido: {error}"))?;
