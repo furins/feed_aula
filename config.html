@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Configuratore FEED Scan</title>
+  <title>FEED · Nuovo questionario</title>
   <style>
     :root {
       color-scheme: light;
@@ -118,6 +118,13 @@
       font-size: .91rem;
       font-weight: 750;
       color: #4b5670;
+    }
+
+    .field-note {
+      color: var(--muted);
+      font-size: .82rem;
+      font-weight: 600;
+      line-height: 1.4;
     }
 
     input,
@@ -255,6 +262,13 @@
       transform: translateY(0);
     }
 
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
     .primary {
       color: #fff;
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
@@ -354,8 +368,8 @@
     </nav>
 
     <header>
-      <h1>Configuratore FEED Scan</h1>
-      <p class="subtitle">Prepara un collegamento pronto da usare per il questionario.</p>
+      <h1>Nuovo questionario</h1>
+      <p class="subtitle">Configura la richiesta e prepara la scansione.</p>
     </header>
 
     <form id="configForm" autocomplete="off">
@@ -365,6 +379,16 @@
           <label class="field wide">
             Indirizzo della pagina FEED Scan
             <input id="baseUrl" type="url" inputmode="url" spellcheck="false" />
+          </label>
+
+          <label class="field wide" id="classField" hidden>
+            Classe
+            <select id="classSelect">
+              <option value="">Nessuna classe (scansione libera)</option>
+            </select>
+            <span class="field-note">
+              Con una classe selezionata FEED usa le assegnazioni dei marker salvate in Classi e alunni.
+            </span>
           </label>
 
           <label class="field">
@@ -484,6 +508,8 @@
     const baseUrl = document.getElementById('baseUrl');
     const questionnaireCode = document.getElementById('questionnaireCode');
     const requestTitle = document.getElementById('requestTitle');
+    const classField = document.getElementById('classField');
+    const classSelect = document.getElementById('classSelect');
     const markerCount = document.getElementById('markerCount');
     const testType = document.getElementById('testType');
     const displayMode = document.getElementById('displayMode');
@@ -496,6 +522,17 @@
     const copyBtn = document.getElementById('copyBtn');
     const openBtn = document.getElementById('openBtn');
     const copyStatus = document.getElementById('copyStatus');
+
+    let feedClasses = [];
+    let classStudents = [];
+
+    function invoke(command, args) {
+      const tauriInvoke = window.__TAURI__?.core?.invoke;
+      if (typeof tauriInvoke !== 'function') {
+        throw new Error('API desktop FEED non disponibile.');
+      }
+      return tauriInvoke(command, args);
+    }
 
     const customFields = {
       d0: document.getElementById('d0'),
@@ -556,6 +593,7 @@
 
       if (code) params.set('codice', code);
       if (title) params.set('titolo', title);
+      if (classSelect.value) params.set('classe', classSelect.value);
       params.set('codici', String(safeCount()));
       params.set('vista', displayMode.value);
 
@@ -590,6 +628,82 @@
       copyStatus.textContent = '';
     }
 
+    async function loadSelectedClass() {
+      const classUuid = classSelect.value;
+
+      if (!classUuid) {
+        classStudents = [];
+        markerCount.disabled = false;
+        openBtn.disabled = false;
+        copyStatus.textContent = '';
+        buildUrl();
+        return;
+      }
+
+      openBtn.disabled = true;
+      copyStatus.textContent = 'Caricamento della classe…';
+
+      try {
+        const students = await invoke('list_students', { classUuid });
+        classStudents = students
+          .filter(student => student.active)
+          .sort((a, b) => a.rosterNumber - b.rosterNumber);
+
+        const withoutMarker = classStudents.filter(
+          student => !Number.isInteger(student.markerNumber)
+        );
+        if (withoutMarker.length) {
+          throw new Error(
+            `${withoutMarker.length} alunni attivi non hanno un marker assegnato. ` +
+            'Completa prima la classe in “Classi e alunni”.'
+          );
+        }
+
+        markerCount.value = String(Math.max(1, classStudents.length));
+        markerCount.disabled = true;
+
+        if (!classStudents.length) {
+          copyStatus.textContent = 'La classe selezionata non contiene alunni attivi.';
+        } else {
+          copyStatus.textContent = `${classStudents.length} alunni attivi.`;
+        }
+      } catch (error) {
+        classStudents = [];
+        markerCount.disabled = true;
+        copyStatus.textContent =
+          typeof error === 'string' ? error : (error?.message || String(error));
+      } finally {
+        openBtn.disabled = classStudents.length === 0;
+        buildUrl();
+      }
+    }
+
+    async function initializeClasses() {
+      if (!window.__TAURI__?.core?.invoke) return;
+
+      const unlocked = await invoke('store_unlocked');
+      if (!unlocked) return;
+
+      feedClasses = await invoke('list_classes');
+      classField.hidden = false;
+      classSelect.innerHTML = '';
+
+      const freeOption = document.createElement('option');
+      freeOption.value = '';
+      freeOption.textContent = 'Nessuna classe (scansione libera)';
+      classSelect.appendChild(freeOption);
+
+      for (const item of feedClasses) {
+        const option = document.createElement('option');
+        option.value = item.classUuid;
+        const year = item.schoolYear ? ` · ${item.schoolYear}` : '';
+        option.textContent = `${item.label}${year} · ${item.activeStudents} alunni`;
+        classSelect.appendChild(option);
+      }
+
+      classSelect.addEventListener('change', loadSelectedClass);
+    }
+
     async function copyUrl() {
       const text = generatedUrl.value;
       if (!text) return;
@@ -612,6 +726,12 @@
     baseUrl.value = defaultPrototypeUrl();
     updateCustomVisibility();
     buildUrl();
+    initializeClasses().catch(error => {
+      classField.hidden = false;
+      classSelect.disabled = true;
+      copyStatus.textContent =
+        typeof error === 'string' ? error : (error?.message || String(error));
+    });
 
     form.addEventListener('input', () => {
       updateCustomVisibility();
@@ -624,6 +744,7 @@
     });
 
     markerCount.addEventListener('blur', () => {
+      if (classSelect.value) return;
       markerCount.value = String(safeCount());
       buildUrl();
     });
@@ -638,6 +759,12 @@
     openBtn.addEventListener('click', () => {
       const target = generatedUrl.value.trim();
       if (!target) return;
+
+      if (classSelect.value && classStudents.length === 0) {
+        copyStatus.textContent =
+          'La classe selezionata non contiene alunni utilizzabili per la scansione.';
+        return;
+      }
 
       if (window.__TAURI__) window.location.assign(target);
       else window.open(target, '_blank', 'noopener');

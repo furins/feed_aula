@@ -740,6 +740,7 @@
       <div class="status-row">
         <span class="status-main" id="statusText">Pronto</span>
         <span id="countText">Rilevati: 0/20</span>
+        <span id="classText" hidden></span>
         <span id="resolutionText">Risoluzione: —</span>
         <span id="scanTimeText">Ultima analisi: —</span>
         <button id="previewBtn" type="button">Mostra anteprima</button>
@@ -822,6 +823,7 @@
 
     const statusText = document.getElementById('statusText');
     const countText = document.getElementById('countText');
+    const classText = document.getElementById('classText');
     const resolutionText = document.getElementById('resolutionText');
     const scanTimeText = document.getElementById('scanTimeText');
     const progressBar = document.getElementById('progressBar');
@@ -844,7 +846,19 @@
     let showChart = false;
     let presentationMode = false;
     let questionnaireCode = '';
+    let classUuid = '';
+    let classMode = false;
+    let classStudents = [];
+    let markerStateById = new Map();
     let customLegend = makeEmptyCustomLegend('Personalizzata');
+
+    function invoke(command, args) {
+      const tauriInvoke = window.__TAURI__?.core?.invoke;
+      if (typeof tauriInvoke !== 'function') {
+        throw new Error('API desktop FEED non disponibile.');
+      }
+      return tauriInvoke(command, args);
+    }
 
     const TEST_LEGENDS = {
       SI_NO: {
@@ -930,6 +944,7 @@
       const params = new URLSearchParams(window.location.search);
 
       questionnaireCode = (firstParam(params, ['codice', 'questionario', 'codiceQuestionario']) || '').trim().slice(0, 60);
+      classUuid = (params.get('classe') || '').trim();
       showData = booleanParam(params, ['dati', 'mostraDati', 'mostradati'], false);
       showChart = booleanParam(params, ['grafico', 'mostraGrafico', 'mostragrafico'], false);
       presentationMode = booleanParam(params, ['presentazione', 'presentation'], false);
@@ -998,6 +1013,58 @@
       }
     }
 
+    async function loadClassContext() {
+      if (!classUuid) return false;
+
+      if (!window.__TAURI__?.core?.invoke) {
+        throw new Error(
+          'La classe indicata nell’URL è disponibile solo nell’app FEED desktop con l’archivio sbloccato.'
+        );
+      }
+
+      const unlocked = await invoke('store_unlocked');
+      if (!unlocked) {
+        throw new Error(
+          'Sblocca FEED prima di avviare una scansione associata a una classe.'
+        );
+      }
+
+      const [students, classes] = await Promise.all([
+        invoke('list_students', { classUuid }),
+        invoke('list_classes')
+      ]);
+
+      classStudents = students
+        .filter(student => student.active)
+        .sort((a, b) => a.rosterNumber - b.rosterNumber);
+
+      if (!classStudents.length) {
+        throw new Error('La classe selezionata non contiene alunni attivi.');
+      }
+
+      const withoutMarker = classStudents.filter(
+        student => !Number.isInteger(student.markerNumber)
+      );
+      if (withoutMarker.length) {
+        throw new Error(
+          `${withoutMarker.length} alunni attivi non hanno un marker assegnato. ` +
+          'Completa prima la classe in “Classi e alunni”.'
+        );
+      }
+
+      const selectedClass = classes.find(item => item.classUuid === classUuid);
+      classText.hidden = false;
+      classText.textContent = selectedClass
+        ? `Classe: ${selectedClass.label}`
+        : 'Classe selezionata';
+
+      classMode = true;
+      markerCount.value = String(classStudents.length);
+      markerCount.disabled = true;
+      createStateFromStudents(classStudents);
+      return true;
+    }
+
     function activeTestType() {
       return hasScanContext ? scanTestType : (testType.value || 'SI_NO');
     }
@@ -1057,15 +1124,40 @@
       return Math.min(MAX_COUNT, Math.max(1, value));
     }
 
+    function refreshMarkerIndex() {
+      markerStateById = new Map(state.map(item => [item.id, item]));
+    }
+
     function createState(count) {
       expectedCount = count;
       state = Array.from({ length: count }, (_, index) => ({
         id: index + 1,
+        rosterNumber: index + 1,
+        studentUuid: null,
+        displayName: '',
         rotation: null,
         lastSeenMs: null,
         hammingDistance: null,
         manual: false
       }));
+      refreshMarkerIndex();
+      buildGrid();
+      updateUI();
+    }
+
+    function createStateFromStudents(students) {
+      state = students.map(student => ({
+        id: student.markerNumber,
+        rosterNumber: student.rosterNumber,
+        studentUuid: student.studentUuid,
+        displayName: student.displayName,
+        rotation: null,
+        lastSeenMs: null,
+        hammingDistance: null,
+        manual: false
+      }));
+      expectedCount = state.length;
+      refreshMarkerIndex();
       buildGrid();
       updateUI();
     }
@@ -1076,8 +1168,9 @@
         const el = document.createElement('div');
         el.className = 'marker';
         el.id = `marker-${item.id}`;
+        const displayNumber = item.rosterNumber ?? item.id;
         el.innerHTML = `
-          <span class="id">${item.id}</span>
+          <span class="id">${displayNumber}</span>
           <span class="state-icon pending" aria-label="Non rilevato" title="Non rilevato">◷</span>
         `;
         markerGrid.appendChild(el);
@@ -1106,7 +1199,10 @@
     function makeValueSelect(item) {
       const select = document.createElement('select');
       select.className = 'marker-value-select';
-      select.setAttribute('aria-label', `Valore ${item.id}`);
+      select.setAttribute(
+        'aria-label',
+        `Valore numero d’appello ${item.rosterNumber ?? item.id}`
+      );
 
       const options = semanticSelectOptions();
       const currentEntry = legendEntry(item.rotation);
@@ -1338,7 +1434,8 @@
       ctx.textBaseline = 'bottom';
 
       for (const marker of markers) {
-        if (marker.id < 1 || marker.id > expectedCount) continue;
+        const item = markerStateById.get(marker.id);
+        if (!item) continue;
         const c = marker.corners;
         ctx.strokeStyle = '#39d884';
         ctx.beginPath();
@@ -1347,7 +1444,7 @@
         ctx.closePath();
         ctx.stroke();
 
-        const label = `${marker.id}`;
+        const label = `${item.rosterNumber ?? marker.id}`;
         const x = Math.max(4 * scale, c[0].x);
         const y = Math.max(36 * scale, c[0].y - 6 * scale);
         const metrics = ctx.measureText(label);
@@ -1380,7 +1477,7 @@
       startBtn.disabled = locked;
       stopBtn.disabled = !locked;
       cameraSelect.disabled = locked;
-      markerCount.disabled = locked;
+      markerCount.disabled = locked || classMode;
       requestTitle.disabled = locked;
       testType.disabled = locked;
       // displayMode resta volutamente modificabile durante l'acquisizione.
@@ -1444,9 +1541,13 @@
       try {
         if (!detector) initDetector();
 
-        const count = normalizedCount();
-        markerCount.value = String(count);
-        createState(count);
+        if (classMode) {
+          markerCount.value = String(expectedCount);
+        } else {
+          const count = normalizedCount();
+          markerCount.value = String(count);
+          createState(count);
+        }
         scanTitle = requestTitle.value.trim();
         scanTestType = testType.value;
         scanCustomLegend = scanTestType === 'CUSTOM' ? cloneLegend(customLegend) : null;
@@ -1529,8 +1630,9 @@
         const elapsedFromStart = performance.now() - startedAt;
 
         for (const marker of markers) {
-          if (!Number.isInteger(marker.id) || marker.id < 1 || marker.id > expectedCount) continue;
-          const item = state[marker.id - 1];
+          if (!Number.isInteger(marker.id)) continue;
+          const item = markerStateById.get(marker.id);
+          if (!item) continue;
           if (!item.manual) item.rotation = quantizeRotation(marker);
           item.lastSeenMs = elapsedFromStart;
           item.hammingDistance = marker.hammingDistance;
@@ -1605,7 +1707,7 @@
 
       for (const item of state) {
         const result = item.rotation === null ? '' : legendText(item.rotation, type);
-        lines.push(`${item.id},${csvEscape(result)}`);
+        lines.push(`${item.rosterNumber ?? item.id},${csvEscape(result)}`);
       }
 
       const parts = [];
@@ -1661,7 +1763,8 @@
     presentationStopBtn.addEventListener('click', () => stopPresentation('Interrotta manualmente'));
     resetBtn.addEventListener('click', () => {
       if (scanning) stopScanning('Scansione azzerata');
-      createState(normalizedCount());
+      if (classMode) resetState();
+      else createState(normalizedCount());
       scanTitle = '';
       scanTestType = testType.value;
       scanCustomLegend = null;
@@ -1682,7 +1785,7 @@
     previewBtn.addEventListener('click', togglePreview);
 
     markerCount.addEventListener('change', () => {
-      if (scanning) return;
+      if (scanning || classMode) return;
       markerCount.value = String(normalizedCount());
       createState(normalizedCount());
     });
@@ -1692,14 +1795,34 @@
       updateUI();
     });
 
-    readUrlParameters();
-    createState(normalizedCount());
-    applyInitialViewState();
-    activatePresentationMode();
-    refreshCameraList().catch(() => { });
-    if (presentationMode) {
-      queueMicrotask(() => startScanning());
+    async function initializePage() {
+      readUrlParameters();
+
+      let classReady = true;
+      try {
+        if (classUuid) await loadClassContext();
+        else createState(normalizedCount());
+      } catch (error) {
+        classReady = false;
+        classMode = false;
+        createState(normalizedCount());
+        startBtn.disabled = true;
+        setMessage(
+          typeof error === 'string' ? error : (error?.message || String(error)),
+          'error'
+        );
+      }
+
+      applyInitialViewState();
+      activatePresentationMode();
+      refreshCameraList().catch(() => { });
+
+      if (presentationMode && classReady) {
+        queueMicrotask(() => startScanning());
+      }
     }
+
+    initializePage();
     window.addEventListener('beforeunload', stopTracks);
   </script>
 </body>
