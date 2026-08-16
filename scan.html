@@ -850,6 +850,10 @@
     let classMode = false;
     let classStudents = [];
     let markerStateById = new Map();
+    let persistentSessionUuid = '';
+    let persistentSessionCompleted = false;
+    let persistenceQueue = Promise.resolve();
+    let persistenceError = null;
     let customLegend = makeEmptyCustomLegend('Personalizzata');
 
     function invoke(command, args) {
@@ -1138,7 +1142,8 @@
         rotation: null,
         lastSeenMs: null,
         hammingDistance: null,
-        manual: false
+        manual: false,
+        lastPersistedKey: null
       }));
       refreshMarkerIndex();
       buildGrid();
@@ -1154,7 +1159,8 @@
         rotation: null,
         lastSeenMs: null,
         hammingDistance: null,
-        manual: false
+        manual: false,
+        lastPersistedKey: null
       }));
       expectedCount = state.length;
       refreshMarkerIndex();
@@ -1180,6 +1186,83 @@
     function setMessage(text = '', kind = '') {
       message.textContent = text;
       message.className = `message ${kind}`.trim();
+    }
+
+    function persistenceFailure(error) {
+      persistenceError =
+        typeof error === 'string' ? error : (error?.message || String(error));
+
+      if (scanning) {
+        scanning = false;
+        if (scanTimer) clearTimeout(scanTimer);
+        scanTimer = null;
+        stopTracks();
+        setControlsLocked(false);
+      }
+
+      statusText.textContent = 'Errore di salvataggio';
+      setMessage(
+        `Scansione interrotta: impossibile salvare lo storico. ${persistenceError}`,
+        'error'
+      );
+    }
+
+    function queueResponsePersistence(item) {
+      if (!persistentSessionUuid || !item.studentUuid || item.rotation === null) return;
+
+      const persistedKey = `${item.rotation}:${item.manual ? 1 : 0}`;
+      if (item.lastPersistedKey === persistedKey) return;
+      item.lastPersistedKey = persistedKey;
+
+      const payload = {
+        sessionUuid: persistentSessionUuid,
+        studentUuid: item.studentUuid,
+        rotation: item.rotation,
+        manualOverride: item.manual
+      };
+
+      persistenceQueue = persistenceQueue
+        .then(() => invoke('save_scan_response', payload))
+        .catch(error => {
+          item.lastPersistedKey = null;
+          persistenceFailure(error);
+        });
+    }
+
+    async function beginPersistentSession() {
+      persistentSessionUuid = '';
+      persistentSessionCompleted = false;
+      persistenceQueue = Promise.resolve();
+      persistenceError = null;
+
+      if (!classMode) return;
+
+      const legendJson = JSON.stringify(activeLegend(scanTestType));
+      const started = await invoke('start_scan_session', {
+        classUuid,
+        code: questionnaireCode || null,
+        title: scanTitle || 'Questionario',
+        testType: scanTestType,
+        displayMode: displayMode.value,
+        legendJson
+      });
+
+      persistentSessionUuid = started.sessionUuid;
+      for (const item of state) item.lastPersistedKey = null;
+    }
+
+    async function completePersistentSession() {
+      const sessionUuid = persistentSessionUuid;
+      if (!sessionUuid) return;
+
+      try {
+        await persistenceQueue;
+        if (persistenceError || persistentSessionCompleted) return;
+        await invoke('complete_scan_session', { sessionUuid });
+        persistentSessionCompleted = true;
+      } catch (error) {
+        if (!persistenceError) persistenceFailure(error);
+      }
     }
 
     function semanticSelectOptions(type = activeTestType()) {
@@ -1220,6 +1303,7 @@
       select.addEventListener('change', () => {
         item.rotation = Number(select.value);
         item.manual = true;
+        queueResponsePersistence(item);
         updateUI();
       });
 
@@ -1407,6 +1491,7 @@
         item.lastSeenMs = null;
         item.hammingDistance = null;
         item.manual = false;
+        item.lastPersistedKey = null;
       }
       updateUI();
       scanTimeText.textContent = 'Ultima analisi: —';
@@ -1493,7 +1578,11 @@
       video.srcObject = null;
     }
 
-    function stopScanning(reason = 'Scansione interrotta', kind = '') {
+    function stopScanning(
+      reason = 'Scansione interrotta',
+      kind = '',
+      completeSession = true
+    ) {
       scanning = false;
       if (scanTimer) clearTimeout(scanTimer);
       scanTimer = null;
@@ -1501,16 +1590,20 @@
       setControlsLocked(false);
       statusText.textContent = reason;
       setMessage(reason, kind);
+
+      if (completeSession) void completePersistentSession();
     }
 
-    function leaveScan() {
+    async function leaveScan() {
       if (scanning) {
-        stopScanning('Scansione annullata');
+        stopScanning('Scansione annullata', '', false);
       } else {
         if (scanTimer) clearTimeout(scanTimer);
         scanTimer = null;
         stopTracks();
       }
+
+      await completePersistentSession();
 
       if (window.history.length > 1) window.history.back();
       else window.location.assign('index.html');
@@ -1553,6 +1646,11 @@
         scanCustomLegend = scanTestType === 'CUSTOM' ? cloneLegend(customLegend) : null;
         hasScanContext = true;
 
+        persistentSessionUuid = '';
+        persistentSessionCompleted = false;
+        persistenceQueue = Promise.resolve();
+        persistenceError = null;
+
         stopTracks();
         resetState();
         setControlsLocked(true);
@@ -1586,6 +1684,9 @@
 
         await refreshCameraList(actualDeviceId);
         cameraSelect.disabled = true;
+
+        await beginPersistentSession();
+
         startedAt = performance.now();
         scanning = true;
         statusText.textContent = 'Scansione in corso';
@@ -1636,6 +1737,7 @@
           if (!item.manual) item.rotation = quantizeRotation(marker);
           item.lastSeenMs = elapsedFromStart;
           item.hammingDistance = marker.hammingDistance;
+          queueResponsePersistence(item);
         }
 
         drawDetectedMarkers(markers);
@@ -1761,14 +1863,20 @@
     startBtn.addEventListener('click', startScanning);
     stopBtn.addEventListener('click', () => stopScanning('Interrotta manualmente'));
     presentationStopBtn.addEventListener('click', () => stopPresentation('Interrotta manualmente'));
-    resetBtn.addEventListener('click', () => {
-      if (scanning) stopScanning('Scansione azzerata');
+    resetBtn.addEventListener('click', async () => {
+      if (scanning) stopScanning('Scansione azzerata', '', false);
+      await completePersistentSession();
+
       if (classMode) resetState();
       else createState(normalizedCount());
       scanTitle = '';
       scanTestType = testType.value;
       scanCustomLegend = null;
       hasScanContext = false;
+      persistentSessionUuid = '';
+      persistentSessionCompleted = false;
+      persistenceQueue = Promise.resolve();
+      persistenceError = null;
       resolutionText.textContent = 'Risoluzione: —';
       scanTimeText.textContent = 'Ultima analisi: —';
       ctx.clearRect(0, 0, canvas.width, canvas.height);

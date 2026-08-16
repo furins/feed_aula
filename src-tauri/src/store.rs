@@ -1281,6 +1281,299 @@ pub fn delete_student(student_uuid: String, state: State<'_, StoreState>) -> Res
     Ok(())
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionStartRecord {
+    questionnaire_uuid: String,
+    session_uuid: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionParticipantSnapshot {
+    student_uuid: String,
+    roster_number: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionQuestionnaireSnapshot {
+    code: Option<String>,
+    title: String,
+    test_type: String,
+    display_mode: String,
+    legend: serde_json::Value,
+    participants: Vec<SessionParticipantSnapshot>,
+}
+
+/// Valida una legenda JSON ricevuta dal frontend e restituisce un valore
+/// normalizzato pronto per essere memorizzato nel database cifrato.
+fn parse_legend_json(legend_json: String) -> Result<serde_json::Value, String> {
+    let legend: serde_json::Value = serde_json::from_str(&legend_json)
+        .map_err(|error| format!("Legenda del questionario non valida: {error}"))?;
+
+    if !legend.is_object() {
+        return Err("La legenda del questionario deve essere un oggetto JSON.".to_string());
+    }
+
+    Ok(legend)
+}
+
+/// Legge dal database identità l'elenco pseudonimizzato degli alunni attivi
+/// della classe da congelare nello snapshot della sessione.
+///
+/// Lo snapshot contiene solo UUID e numero d'appello: nominativi e marker
+/// fisici restano esclusivamente nel database separato delle identità.
+fn session_participants(
+    connection: &Connection,
+    class_uuid: &str,
+) -> Result<Vec<SessionParticipantSnapshot>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT student_uuid, roster_number
+             FROM students
+             WHERE class_uuid = ?1
+               AND active = 1
+               AND marker_number IS NOT NULL
+             ORDER BY roster_number",
+        )
+        .map_err(|error| format!("Impossibile leggere gli alunni della classe: {error}"))?;
+
+    let rows = statement
+        .query_map([class_uuid], |row| {
+            Ok(SessionParticipantSnapshot {
+                student_uuid: row.get(0)?,
+                roster_number: row.get(1)?,
+            })
+        })
+        .map_err(|error| format!("Impossibile leggere gli alunni della classe: {error}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Impossibile leggere gli alunni della classe: {error}"))
+}
+
+/// Avvia una sessione persistente per una scansione associata a una classe.
+///
+/// Il questionario e lo snapshot della configurazione vengono salvati in
+/// `feed.db`; nello snapshot non vengono mai inclusi i nominativi degli alunni.
+#[tauri::command]
+pub fn start_scan_session(
+    class_uuid: String,
+    code: Option<String>,
+    title: String,
+    test_type: String,
+    display_mode: String,
+    legend_json: String,
+    state: State<'_, StoreState>,
+) -> Result<SessionStartRecord, String> {
+    let title = required_text(title, "Il titolo del questionario", 120)?;
+    let code = optional_text(code, 60)?;
+    let test_type = required_text(test_type, "Il tipo di test", 80)?;
+    let display_mode = required_text(display_mode, "La modalità di visualizzazione", 20)?;
+    let legend = parse_legend_json(legend_json)?;
+
+    let mut guard = state
+        .inner
+        .lock()
+        .map_err(|_| "Stato del database non disponibile.".to_string())?;
+    let store = guard
+        .as_mut()
+        .ok_or_else(|| "FEED è bloccato. Sblocca l'archivio per continuare.".to_string())?;
+
+    if !class_exists(&store.identities, &class_uuid)? {
+        return Err("Classe non trovata.".to_string());
+    }
+
+    let active_count = store
+        .identities
+        .query_row(
+            "SELECT COUNT(*) FROM students WHERE class_uuid = ?1 AND active = 1",
+            [class_uuid.as_str()],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(|error| format!("Impossibile verificare la classe: {error}"))?;
+
+    let participants = session_participants(&store.identities, &class_uuid)?;
+    if participants.is_empty() {
+        return Err(
+            "La classe selezionata non contiene alunni attivi con marker assegnato.".to_string(),
+        );
+    }
+    if participants.len() as i64 != active_count {
+        return Err(
+            "Alcuni alunni attivi non hanno un marker assegnato. Completa prima la classe."
+                .to_string(),
+        );
+    }
+
+    let questionnaire_uuid = new_uuid_v4()?;
+    let session_uuid = new_uuid_v4()?;
+
+    let normalized_legend = serde_json::to_string(&legend)
+        .map_err(|error| format!("Impossibile serializzare la legenda: {error}"))?;
+
+    let snapshot = SessionQuestionnaireSnapshot {
+        code: code.clone(),
+        title: title.clone(),
+        test_type: test_type.clone(),
+        display_mode,
+        legend,
+        participants,
+    };
+    let snapshot_json = serde_json::to_string(&snapshot)
+        .map_err(|error| format!("Impossibile creare lo snapshot del questionario: {error}"))?;
+
+    let transaction = store
+        .data
+        .transaction()
+        .map_err(|error| format!("Impossibile iniziare la sessione: {error}"))?;
+
+    transaction
+        .execute(
+            "INSERT INTO questionnaires(
+               questionnaire_uuid, code, title, test_type, legend_json
+             ) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                questionnaire_uuid,
+                code,
+                title,
+                test_type,
+                normalized_legend
+            ],
+        )
+        .map_err(|error| format!("Impossibile salvare il questionario: {error}"))?;
+
+    transaction
+        .execute(
+            "INSERT INTO sessions(
+               session_uuid, questionnaire_uuid, class_uuid, questionnaire_snapshot_json
+             ) VALUES (?1, ?2, ?3, ?4)",
+            params![session_uuid, questionnaire_uuid, class_uuid, snapshot_json],
+        )
+        .map_err(|error| format!("Impossibile creare la sessione: {error}"))?;
+
+    transaction
+        .commit()
+        .map_err(|error| format!("Impossibile salvare la sessione: {error}"))?;
+
+    Ok(SessionStartRecord {
+        questionnaire_uuid,
+        session_uuid,
+    })
+}
+
+/// Salva o aggiorna la risposta pseudonimizzata di un alunno nella sessione.
+///
+/// Il comando verifica che l'alunno appartenga alla classe della sessione e
+/// registra separatamente se il valore deriva dal marker o da una correzione
+/// manuale del docente.
+#[tauri::command]
+pub fn save_scan_response(
+    session_uuid: String,
+    student_uuid: String,
+    rotation: i64,
+    manual_override: bool,
+    state: State<'_, StoreState>,
+) -> Result<(), String> {
+    if !matches!(rotation, 0 | 90 | 180 | 270) {
+        return Err("Rotazione della risposta non valida.".to_string());
+    }
+
+    let mut guard = state
+        .inner
+        .lock()
+        .map_err(|_| "Stato del database non disponibile.".to_string())?;
+    let store = guard
+        .as_mut()
+        .ok_or_else(|| "FEED è bloccato. Sblocca l'archivio per continuare.".to_string())?;
+
+    let class_uuid = store
+        .data
+        .query_row(
+            "SELECT class_uuid FROM sessions WHERE session_uuid = ?1",
+            [session_uuid.as_str()],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(|_| "Sessione FEED non trovata.".to_string())?;
+
+    let belongs_to_class = store
+        .identities
+        .query_row(
+            "SELECT EXISTS(
+               SELECT 1
+               FROM students
+               WHERE student_uuid = ?1 AND class_uuid = ?2
+             )",
+            params![student_uuid, class_uuid],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(|error| format!("Impossibile verificare l'alunno: {error}"))?
+        == 1;
+
+    if !belongs_to_class {
+        return Err("L'alunno non appartiene alla classe della sessione.".to_string());
+    }
+
+    let source = if manual_override { "manual" } else { "marker" };
+
+    store
+        .data
+        .execute(
+            "INSERT INTO responses(
+               session_uuid, student_uuid, rotation, source, manual_override, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, CURRENT_TIMESTAMP)
+             ON CONFLICT(session_uuid, student_uuid) DO UPDATE SET
+               rotation = excluded.rotation,
+               source = excluded.source,
+               manual_override = excluded.manual_override,
+               updated_at = CURRENT_TIMESTAMP",
+            params![
+                session_uuid,
+                student_uuid,
+                rotation,
+                source,
+                if manual_override { 1 } else { 0 }
+            ],
+        )
+        .map_err(|error| format!("Impossibile salvare la risposta: {error}"))?;
+
+    Ok(())
+}
+
+/// Segna come conclusa una sessione di scansione.
+///
+/// L'operazione è idempotente: chiamarla più volte non modifica la prima data
+/// di completamento già registrata.
+#[tauri::command]
+pub fn complete_scan_session(
+    session_uuid: String,
+    state: State<'_, StoreState>,
+) -> Result<(), String> {
+    let mut guard = state
+        .inner
+        .lock()
+        .map_err(|_| "Stato del database non disponibile.".to_string())?;
+    let store = guard
+        .as_mut()
+        .ok_or_else(|| "FEED è bloccato. Sblocca l'archivio per continuare.".to_string())?;
+
+    let changed = store
+        .data
+        .execute(
+            "UPDATE sessions
+             SET completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+             WHERE session_uuid = ?1",
+            [session_uuid.as_str()],
+        )
+        .map_err(|error| format!("Impossibile chiudere la sessione: {error}"))?;
+
+    if changed == 0 {
+        return Err("Sessione FEED non trovata.".to_string());
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 /// Indica al frontend se l'archivio FEED esiste ed è composto da tutti i file previsti.
 pub fn store_exists(app: AppHandle) -> Result<bool, String> {
