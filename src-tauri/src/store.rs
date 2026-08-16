@@ -1288,14 +1288,14 @@ pub struct SessionStartRecord {
     session_uuid: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SessionParticipantSnapshot {
     student_uuid: String,
     roster_number: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SessionQuestionnaireSnapshot {
     code: Option<String>,
@@ -1572,6 +1572,281 @@ pub fn complete_scan_session(
     }
 
     Ok(())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistorySessionSummary {
+    session_uuid: String,
+    class_uuid: String,
+    class_label: String,
+    school_year: Option<String>,
+    code: Option<String>,
+    title: String,
+    test_type: String,
+    started_at: String,
+    completed_at: Option<String>,
+    response_count: i64,
+    participant_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryResponseRecord {
+    roster_number: i64,
+    display_name: Option<String>,
+    rotation: Option<i64>,
+    source: Option<String>,
+    manual_override: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistorySessionDetail {
+    session: HistorySessionSummary,
+    legend: serde_json::Value,
+    responses: Vec<HistoryResponseRecord>,
+}
+
+/// Restituisce l'etichetta corrente e l'anno scolastico di una classe senza
+/// duplicare queste informazioni nel database pseudonimizzato.
+fn history_class_info(
+    connection: &Connection,
+    class_uuid: &str,
+) -> Result<(String, Option<String>), String> {
+    let class_info = connection
+        .query_row(
+            "SELECT label, school_year FROM classes WHERE class_uuid = ?1",
+            [class_uuid],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+        )
+        .optional()
+        .map_err(|error| format!("Impossibile leggere la classe dello storico: {error}"))?;
+
+    Ok(class_info.unwrap_or_else(|| ("Classe non disponibile".to_string(), None)))
+}
+
+/// Converte una riga di sessione in un riepilogo e risolve l'etichetta della
+/// classe esclusivamente in RAM dal database separato delle identità.
+fn history_summary_from_row(
+    row: &rusqlite::Row<'_>,
+    identities: &Connection,
+) -> Result<HistorySessionSummary, String> {
+    let session_uuid: String = row
+        .get(0)
+        .map_err(|error| format!("Impossibile leggere la sessione: {error}"))?;
+    let class_uuid: String = row
+        .get(1)
+        .map_err(|error| format!("Impossibile leggere la classe della sessione: {error}"))?;
+    let snapshot_json: String = row
+        .get(2)
+        .map_err(|error| format!("Impossibile leggere lo snapshot della sessione: {error}"))?;
+    let started_at: String = row
+        .get(3)
+        .map_err(|error| format!("Impossibile leggere la data della sessione: {error}"))?;
+    let completed_at: Option<String> = row
+        .get(4)
+        .map_err(|error| format!("Impossibile leggere la chiusura della sessione: {error}"))?;
+    let response_count: i64 = row
+        .get(5)
+        .map_err(|error| format!("Impossibile contare le risposte: {error}"))?;
+
+    let snapshot: SessionQuestionnaireSnapshot = serde_json::from_str(&snapshot_json)
+        .map_err(|error| format!("Snapshot della sessione non valido: {error}"))?;
+    let participant_count = snapshot.participants.len();
+    let (class_label, school_year) = history_class_info(identities, &class_uuid)?;
+
+    Ok(HistorySessionSummary {
+        session_uuid,
+        class_uuid,
+        class_label,
+        school_year,
+        code: snapshot.code,
+        title: snapshot.title,
+        test_type: snapshot.test_type,
+        started_at,
+        completed_at,
+        response_count,
+        participant_count,
+    })
+}
+
+/// Restituisce le sessioni registrate, eventualmente filtrate per classe.
+/// I nominativi non fanno parte di questo riepilogo e restano in identities.db.
+#[tauri::command]
+pub fn list_history_sessions(
+    class_uuid: Option<String>,
+    state: State<'_, StoreState>,
+) -> Result<Vec<HistorySessionSummary>, String> {
+    let guard = state
+        .inner
+        .lock()
+        .map_err(|_| "Stato del database non disponibile.".to_string())?;
+    let store = guard
+        .as_ref()
+        .ok_or_else(|| "FEED è bloccato. Sblocca l'archivio per continuare.".to_string())?;
+
+    let sql = if class_uuid.is_some() {
+        "SELECT s.session_uuid,
+                s.class_uuid,
+                s.questionnaire_snapshot_json,
+                s.started_at,
+                s.completed_at,
+                (SELECT COUNT(*) FROM responses r WHERE r.session_uuid = s.session_uuid)
+         FROM sessions s
+         WHERE s.class_uuid = ?1
+         ORDER BY s.started_at DESC, s.session_uuid DESC"
+    } else {
+        "SELECT s.session_uuid,
+                s.class_uuid,
+                s.questionnaire_snapshot_json,
+                s.started_at,
+                s.completed_at,
+                (SELECT COUNT(*) FROM responses r WHERE r.session_uuid = s.session_uuid)
+         FROM sessions s
+         ORDER BY s.started_at DESC, s.session_uuid DESC"
+    };
+
+    let mut statement = store
+        .data
+        .prepare(sql)
+        .map_err(|error| format!("Impossibile preparare lo storico: {error}"))?;
+
+    let mut rows = if let Some(class_uuid) = class_uuid.as_deref() {
+        statement
+            .query([class_uuid])
+            .map_err(|error| format!("Impossibile leggere lo storico: {error}"))?
+    } else {
+        statement
+            .query([])
+            .map_err(|error| format!("Impossibile leggere lo storico: {error}"))?
+    };
+
+    let mut sessions = Vec::new();
+    while let Some(row) = rows
+        .next()
+        .map_err(|error| format!("Impossibile leggere lo storico: {error}"))?
+    {
+        sessions.push(history_summary_from_row(row, &store.identities)?);
+    }
+
+    Ok(sessions)
+}
+
+/// Restituisce il dettaglio di una sessione ricostruendo i nominativi soltanto
+/// al momento della lettura dal database separato delle identità.
+#[tauri::command]
+pub fn get_history_session(
+    session_uuid: String,
+    state: State<'_, StoreState>,
+) -> Result<HistorySessionDetail, String> {
+    let guard = state
+        .inner
+        .lock()
+        .map_err(|_| "Stato del database non disponibile.".to_string())?;
+    let store = guard
+        .as_ref()
+        .ok_or_else(|| "FEED è bloccato. Sblocca l'archivio per continuare.".to_string())?;
+
+    let session_row = store
+        .data
+        .query_row(
+            "SELECT s.session_uuid,
+                    s.class_uuid,
+                    s.questionnaire_snapshot_json,
+                    s.started_at,
+                    s.completed_at,
+                    (SELECT COUNT(*) FROM responses r WHERE r.session_uuid = s.session_uuid)
+             FROM sessions s
+             WHERE s.session_uuid = ?1",
+            [session_uuid.as_str()],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, i64>(5)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| format!("Impossibile leggere la sessione: {error}"))?
+        .ok_or_else(|| "Sessione FEED non trovata.".to_string())?;
+
+    let snapshot: SessionQuestionnaireSnapshot = serde_json::from_str(&session_row.2)
+        .map_err(|error| format!("Snapshot della sessione non valido: {error}"))?;
+    let (class_label, school_year) = history_class_info(&store.identities, &session_row.1)?;
+
+    let session = HistorySessionSummary {
+        session_uuid: session_row.0.clone(),
+        class_uuid: session_row.1,
+        class_label,
+        school_year,
+        code: snapshot.code.clone(),
+        title: snapshot.title.clone(),
+        test_type: snapshot.test_type.clone(),
+        started_at: session_row.3,
+        completed_at: session_row.4,
+        response_count: session_row.5,
+        participant_count: snapshot.participants.len(),
+    };
+
+    let mut responses = Vec::with_capacity(snapshot.participants.len());
+
+    for participant in &snapshot.participants {
+        let display_name = store
+            .identities
+            .query_row(
+                "SELECT display_name FROM students WHERE student_uuid = ?1",
+                [participant.student_uuid.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| format!("Impossibile leggere il nominativo dello storico: {error}"))?;
+
+        let response = store
+            .data
+            .query_row(
+                "SELECT rotation, source, manual_override
+                 FROM responses
+                 WHERE session_uuid = ?1 AND student_uuid = ?2",
+                params![session_uuid.as_str(), participant.student_uuid.as_str()],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, i64>(2)? == 1,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|error| format!("Impossibile leggere una risposta dello storico: {error}"))?;
+
+        let (rotation, source, manual_override) = match response {
+            Some((rotation, source, manual_override)) => {
+                (Some(rotation), Some(source), manual_override)
+            }
+            None => (None, None, false),
+        };
+
+        responses.push(HistoryResponseRecord {
+            roster_number: participant.roster_number,
+            display_name,
+            rotation,
+            source,
+            manual_override,
+        });
+    }
+
+    responses.sort_by_key(|response| response.roster_number);
+
+    Ok(HistorySessionDetail {
+        session,
+        legend: snapshot.legend,
+        responses,
+    })
 }
 
 #[tauri::command]

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>FEED · Storico</title>
+  <style>
+    :root { color-scheme:light; --bg:#f5f8f7; --panel:#fff; --text:#263438; --muted:#66777b; --line:#d8e3e1; --accent:#418184; --accent-dark:#2f6265; --accent-soft:#e8f1ef; --green-soft:#eaf3e8; --gold-soft:#f7f0df; --danger:#b44b42; --danger-soft:#fff0ee; --shadow:0 16px 42px rgba(38,52,56,.09); }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; font-family:ui-rounded,"SF Pro Rounded","Nunito",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--text); background:radial-gradient(circle at 5% 4%,rgba(203,161,80,.12),transparent 26rem),radial-gradient(circle at 95% 8%,rgba(65,129,132,.12),transparent 28rem),var(--bg); }
+    button,select { font:inherit; }
+    .shell { width:min(1180px,calc(100% - 32px)); margin:0 auto; padding:30px 0 52px; }
+    .page-nav { display:flex; margin-bottom:14px; padding:0 4px; }
+    .back-button { min-height:42px; padding:9px 14px; border:1px solid #b7d1ce; border-radius:12px; background:var(--accent-soft); color:var(--accent-dark); font-weight:800; cursor:pointer; }
+    .page-header { margin-bottom:20px; padding:0 4px; }
+    h1 { margin:0; font-size:clamp(1.8rem,4vw,2.7rem); line-height:1.05; letter-spacing:-.035em; }
+    .subtitle { margin:9px 0 0; color:var(--muted); }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:22px; box-shadow:var(--shadow); padding:20px; }
+    .toolbar { display:grid; grid-template-columns:minmax(220px,360px) 1fr; gap:16px; align-items:end; }
+    .field { display:grid; gap:6px; color:#506266; font-size:.9rem; font-weight:750; }
+    select { width:100%; min-height:43px; padding:9px 11px; border:1px solid #cad9d7; border-radius:12px; background:#fff; color:var(--text); }
+    .summary { color:var(--muted); text-align:right; padding-bottom:10px; font-size:.9rem; font-weight:700; }
+    .layout { display:grid; grid-template-columns:minmax(290px,.8fr) minmax(0,1.55fr); gap:18px; margin-top:18px; align-items:start; }
+    .session-list { display:grid; gap:9px; }
+    .session-button { width:100%; border:1px solid var(--line); border-radius:15px; background:#fbfcfc; color:var(--text); text-align:left; padding:13px; cursor:pointer; }
+    .session-button:hover,.session-button.selected { border-color:#a8c8c5; background:var(--accent-soft); }
+    .session-title { display:block; font-weight:850; }
+    .session-meta { display:block; margin-top:5px; color:var(--muted); font-size:.82rem; line-height:1.4; }
+    .session-footer { display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin-top:9px; }
+    .badge { display:inline-flex; align-items:center; min-height:27px; padding:0 9px; border-radius:999px; font-size:.76rem; font-weight:850; }
+    .badge.complete { color:#426d45; background:var(--green-soft); } .badge.partial,.badge.manual { color:#715a28; background:var(--gold-soft); } .badge.open { color:var(--danger); background:var(--danger-soft); }
+    .count,.muted { color:var(--muted); } .count { font-size:.79rem; font-weight:750; }
+    .empty { padding:22px; border:1px dashed #cbd9d7; border-radius:14px; color:var(--muted); text-align:center; background:#fbfcfc; }
+    .detail-header { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; margin-bottom:17px; }
+    .detail-header h2 { margin:0; font-size:1.3rem; } .detail-meta { margin:6px 0 0; color:var(--muted); line-height:1.45; font-size:.9rem; }
+    .table-wrap { overflow-x:auto; } table { width:100%; border-collapse:separate; border-spacing:0 8px; min-width:650px; }
+    th { padding:0 9px 3px; color:var(--muted); font-size:.77rem; text-align:left; text-transform:uppercase; letter-spacing:.04em; }
+    td { padding:10px 9px; background:#f9fbfa; border-top:1px solid #e3ecea; border-bottom:1px solid #e3ecea; vertical-align:middle; }
+    td:first-child { border-left:1px solid #e3ecea; border-radius:13px 0 0 13px; font-weight:850; } td:last-child { border-right:1px solid #e3ecea; border-radius:0 13px 13px 0; }
+    .message { min-height:1.35em; margin-top:12px; font-size:.9rem; font-weight:700; } .message.error { color:var(--danger); }
+    [hidden] { display:none !important; }
+    @media(max-width:850px){ .layout,.toolbar{grid-template-columns:1fr}.summary{text-align:left;padding-bottom:0} }
+    @media(max-width:560px){ .shell{width:min(100% - 20px,1180px);padding-top:20px}.panel{padding:16px;border-radius:18px}.detail-header{display:block}.detail-header .badge{margin-top:10px} }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <nav class="page-nav" aria-label="Navigazione"><button id="backBtn" class="back-button" type="button">← Indietro</button></nav>
+    <header class="page-header"><h1>Storico</h1><p class="subtitle">Consulta le sessioni formative registrate in FEED.</p></header>
+    <div id="loading" class="panel">Caricamento dello storico…</div>
+    <div id="content" hidden>
+      <section class="panel toolbar">
+        <label class="field">Classe<select id="classFilter"><option value="">Tutte le classi</option></select></label>
+        <div id="historySummary" class="summary"></div>
+      </section>
+      <div class="layout">
+        <section class="panel"><div id="sessionsEmpty" class="empty" hidden>Nessuna sessione registrata.</div><div id="sessionList" class="session-list"></div></section>
+        <section class="panel">
+          <div id="detailEmpty" class="empty">Seleziona una sessione per vedere le risposte.</div>
+          <div id="detail" hidden>
+            <div class="detail-header"><div><h2 id="detailTitle"></h2><p id="detailMeta" class="detail-meta"></p></div><span id="detailStatus" class="badge"></span></div>
+            <div class="table-wrap"><table><thead><tr><th>N.</th><th>Alunno</th><th>Risposta</th><th>Origine</th></tr></thead><tbody id="responsesBody"></tbody></table></div>
+          </div>
+          <div id="historyMessage" class="message"></div>
+        </section>
+      </div>
+    </div>
+    <div id="fatal" class="panel" hidden><h2>Impossibile aprire lo storico</h2><p id="fatalMessage"></p></div>
+  </main>
+  <script>
+    'use strict';
+    const backBtn=document.getElementById('backBtn'),loading=document.getElementById('loading'),content=document.getElementById('content'),fatal=document.getElementById('fatal'),fatalMessage=document.getElementById('fatalMessage');
+    const classFilter=document.getElementById('classFilter'),historySummary=document.getElementById('historySummary'),sessionsEmpty=document.getElementById('sessionsEmpty'),sessionList=document.getElementById('sessionList');
+    const detailEmpty=document.getElementById('detailEmpty'),detail=document.getElementById('detail'),detailTitle=document.getElementById('detailTitle'),detailMeta=document.getElementById('detailMeta'),detailStatus=document.getElementById('detailStatus'),responsesBody=document.getElementById('responsesBody'),historyMessage=document.getElementById('historyMessage');
+    let sessions=[],selectedSessionUuid=null;
+    function invoke(command,args){const fn=window.__TAURI__?.core?.invoke;if(typeof fn!=='function')throw new Error('API desktop FEED non disponibile.');return fn(command,args)}
+    function errorText(error){return typeof error==='string'?error:(error?.message||String(error))}
+    function localDateTime(value){if(!value)return '—';const parsed=new Date(value.replace(' ','T')+'Z');if(Number.isNaN(parsed.getTime()))return value;return new Intl.DateTimeFormat('it-IT',{dateStyle:'medium',timeStyle:'short'}).format(parsed)}
+    function sessionStatus(item){if(item.participantCount>0&&item.responseCount>=item.participantCount)return{text:'Completa',kind:'complete'};if(item.completedAt)return{text:'Parziale',kind:'partial'};return{text:'Non chiusa',kind:'open'}}
+    function formatAnswer(legend,rotation){if(rotation===null||rotation===undefined)return '—';const entry=legend?.values?.[String(rotation)]??legend?.values?.[rotation];if(!entry)return `${rotation}°`;const text=entry.text||'N.A.',emoji=entry.emoji||'';return emoji&&text!=='N.A.'?`${text} ${emoji}`:text}
+    function fillClassFilter(classes){classFilter.innerHTML='<option value="">Tutte le classi</option>';for(const item of classes){const option=document.createElement('option');option.value=item.classUuid;option.textContent=item.schoolYear?`${item.label} · ${item.schoolYear}`:item.label;classFilter.appendChild(option)}}
+    function renderSessions(){sessionList.innerHTML='';sessionsEmpty.hidden=sessions.length>0;historySummary.textContent=sessions.length===1?'1 sessione':`${sessions.length} sessioni`;for(const item of sessions){const status=sessionStatus(item),button=document.createElement('button');button.type='button';button.className=`session-button${item.sessionUuid===selectedSessionUuid?' selected':''}`;const title=document.createElement('span');title.className='session-title';title.textContent=item.title||'Questionario';const meta=document.createElement('span');meta.className='session-meta';meta.textContent=`${item.classLabel}${item.schoolYear?` · ${item.schoolYear}`:''} · ${localDateTime(item.startedAt)}${item.code?` · ${item.code}`:''}`;const footer=document.createElement('span');footer.className='session-footer';const badge=document.createElement('span');badge.className=`badge ${status.kind}`;badge.textContent=status.text;const count=document.createElement('span');count.className='count';count.textContent=`${item.responseCount}/${item.participantCount} risposte`;footer.append(badge,count);button.append(title,meta,footer);button.addEventListener('click',()=>selectSession(item.sessionUuid));sessionList.appendChild(button)}}
+    async function loadSessions(){historyMessage.textContent='';selectedSessionUuid=null;detail.hidden=true;detailEmpty.hidden=false;sessions=await invoke('list_history_sessions',{classUuid:classFilter.value||null});renderSessions();if(sessions.length)await selectSession(sessions[0].sessionUuid)}
+    async function selectSession(sessionUuid){selectedSessionUuid=sessionUuid;renderSessions();historyMessage.textContent='';try{const data=await invoke('get_history_session',{sessionUuid}),item=data.session,status=sessionStatus(item);detailTitle.textContent=item.title||'Questionario';const pieces=[item.classLabel,item.schoolYear||null,localDateTime(item.startedAt),item.testType].filter(Boolean);if(item.code)pieces.push(`Codice ${item.code}`);detailMeta.textContent=pieces.join(' · ');detailStatus.textContent=status.text;detailStatus.className=`badge ${status.kind}`;responsesBody.innerHTML='';for(const response of data.responses){const row=document.createElement('tr'),rosterCell=document.createElement('td'),nameCell=document.createElement('td'),answerCell=document.createElement('td'),sourceCell=document.createElement('td');rosterCell.textContent=String(response.rosterNumber);nameCell.textContent=response.displayName||'Identità non disponibile';if(!response.displayName)nameCell.classList.add('muted');answerCell.textContent=formatAnswer(data.legend,response.rotation);if(response.rotation===null||response.rotation===undefined)answerCell.classList.add('muted');if(response.manualOverride){const badge=document.createElement('span');badge.className='badge manual';badge.textContent='Corretta manualmente';sourceCell.appendChild(badge)}else if(response.rotation!==null&&response.rotation!==undefined){sourceCell.textContent='Rilevata'}else{sourceCell.textContent='—';sourceCell.classList.add('muted')}row.append(rosterCell,nameCell,answerCell,sourceCell);responsesBody.appendChild(row)}detailEmpty.hidden=true;detail.hidden=false}catch(error){detail.hidden=true;detailEmpty.hidden=false;historyMessage.textContent=errorText(error);historyMessage.className='message error'}}
+    classFilter.addEventListener('change',()=>loadSessions().catch(error=>{historyMessage.textContent=errorText(error);historyMessage.className='message error'}));
+    backBtn.addEventListener('click',()=>{if(window.history.length>1)window.history.back();else window.location.assign('index.html')});
+    async function initialize(){try{const unlocked=await invoke('store_unlocked');if(!unlocked){window.location.replace('index.html');return}fillClassFilter(await invoke('list_classes'));await loadSessions();loading.hidden=true;content.hidden=false}catch(error){loading.hidden=true;fatal.hidden=false;fatalMessage.textContent=errorText(error)}}
+    initialize();
+  </script>
+</body>
+</html>

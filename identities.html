@@ -280,6 +280,23 @@
       white-space: nowrap;
     }
 
+    .student-feedback-row td {
+      padding: 0 8px 8px;
+      border: 0 !important;
+      background: transparent;
+    }
+
+    .student-feedback {
+      padding: 10px 12px;
+      border: 1px solid #efc9c5;
+      border-radius: 12px;
+      background: var(--danger-soft);
+      color: var(--danger);
+      font-size: .86rem;
+      font-weight: 750;
+      line-height: 1.4;
+    }
+
     .status {
       display: inline-flex;
       align-items: center;
@@ -707,6 +724,23 @@
         deleteBtn.className = 'danger';
         deleteBtn.textContent = 'Elimina';
 
+        const feedbackRow = document.createElement('tr');
+        feedbackRow.className = 'student-feedback-row';
+        feedbackRow.hidden = true;
+
+        const feedbackCell = document.createElement('td');
+        feedbackCell.colSpan = 5;
+
+        const feedbackMessage = document.createElement('div');
+        feedbackMessage.className = 'student-feedback';
+        feedbackCell.appendChild(feedbackMessage);
+        feedbackRow.appendChild(feedbackCell);
+
+        function setStudentFeedback(text = '') {
+          feedbackMessage.textContent = text;
+          feedbackRow.hidden = !text;
+        }
+
         let saveTimer = null;
         let saveQueue = Promise.resolve();
 
@@ -776,21 +810,21 @@
           if (!confirmed) return;
 
           await saveQueue;
-          setMessage(studentMessage, '');
+          setStudentFeedback('');
 
           try {
             await invoke('delete_student', { studentUuid: student.studentUuid });
             await reloadSelectedClass();
             showSaved(studentMessage, 'Alunno eliminato.');
           } catch (error) {
-            setMessage(studentMessage, errorText(error), 'error');
+            setStudentFeedback(errorText(error));
           }
         });
 
         actions.append(activeBtn, deleteBtn);
         actionCell.appendChild(actions);
         row.append(rosterCell, nameCell, markerCell, statusCell, actionCell);
-        studentsBody.appendChild(row);
+        studentsBody.append(row, feedbackRow);
       }
 
       prepareNewStudentDefaults();

@@ -78,7 +78,9 @@ fn main() {
             store::delete_student,
             store::start_scan_session,
             store::save_scan_response,
-            store::complete_scan_session
+            store::complete_scan_session,
+            store::list_history_sessions,
+            store::get_history_session
         ])
         .run(tauri::generate_context!())
         .expect("errore durante l'avvio di FEED");
